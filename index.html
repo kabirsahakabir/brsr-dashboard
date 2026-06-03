@@ -1,0 +1,2377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OSH · BRSR Data Health Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0f1117; --surface:#1a1d2e; --surface2:#242740; --border:#2e3250;
+  --accent:#6c63ff; --accent2:#00d4aa; --accent3:#ff6b6b; --accent4:#ffd93d;
+  --text:#e8eaf6; --muted:#8b8fa8;
+  --critical:#ff4757; --high:#ff6348; --medium:#ffd93d; --ok:#2ed573;
+  --font:'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;}
+
+/* ── UPLOAD SCREEN ── */
+#upload-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;}
+.osh-logo{display:flex;align-items:center;gap:14px;margin-bottom:40px;}
+.osh-logo .logo-box{width:52px;height:52px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;}
+.osh-logo h1{font-size:22px;font-weight:700;line-height:1.2;}
+.osh-logo .sub{font-size:13px;color:var(--muted);}
+
+.drop-zone{
+  width:100%;max-width:640px;border:2px dashed var(--border);border-radius:20px;
+  padding:60px 40px;text-align:center;cursor:pointer;transition:all .25s;
+  background:var(--surface);
+}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(108,99,255,.07);}
+.drop-zone .dz-icon{font-size:52px;margin-bottom:20px;}
+.drop-zone h2{font-size:20px;font-weight:600;margin-bottom:10px;}
+.drop-zone p{color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:24px;}
+.drop-zone .file-info{font-size:12px;color:var(--muted);margin-top:8px;}
+.btn-upload{display:inline-block;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s;}
+.btn-upload:hover{opacity:.85;}
+#fileInput{display:none;}
+
+.format-note{margin-top:28px;max-width:640px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px;font-size:13px;color:var(--muted);}
+.format-note strong{color:var(--text);}
+.format-note ul{margin-top:8px;padding-left:20px;line-height:2;}
+
+.err-box{margin-top:16px;max-width:640px;width:100%;background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.4);border-radius:10px;padding:14px 18px;color:#ff6b6b;font-size:13px;display:none;}
+.recent-section{margin-top:32px;max-width:640px;width:100%;}
+.recent-section h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;}
+.recent-chips{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--muted);}
+
+/* ── LOADING SCREEN ── */
+#loading-screen{display:none;min-height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:24px;background:var(--bg);}
+#loading-screen.active{display:flex;}
+.spinner{width:52px;height:52px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#loading-msg{font-size:15px;color:var(--muted);}
+#loading-progress{font-size:13px;color:var(--accent);}
+
+/* ── DASHBOARD ── */
+#dashboard-wrapper{display:none;}
+
+/* ── TOP BAR ── */
+.topbar{background:linear-gradient(135deg,#1a1d2e 0%,#242740 100%);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
+.topbar .brand{display:flex;align-items:center;gap:12px;}
+.topbar .logo{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;}
+.topbar h1{font-size:17px;font-weight:700;line-height:1.2;}
+.topbar .sub{font-size:12px;color:var(--muted);}
+.topbar .right{display:flex;align-items:center;gap:16px;}
+.topbar .meta{text-align:right;font-size:12px;color:var(--muted);line-height:1.8;}
+.btn-new{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;transition:all .2s;}
+.btn-new:hover{border-color:var(--accent);color:var(--text);}
+
+/* ── MAIN LAYOUT ── */
+.main{display:flex;min-height:calc(100vh - 69px);}
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);padding:20px 0;overflow-y:auto;position:sticky;top:0;height:calc(100vh - 69px);}
+.sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:0 18px 8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;border-left:3px solid transparent;transition:all .2s;color:var(--muted);font-size:13px;}
+.nav-item:hover,.nav-item.active{background:rgba(108,99,255,.1);border-left-color:var(--accent);color:var(--text);}
+.nav-icon{font-size:15px;}
+.content{flex:1;overflow-x:hidden;}
+
+/* ── PAGES ── */
+.page{display:none;padding:22px 26px;}
+.page.active{display:block;}
+.page-title{font-size:21px;font-weight:700;margin-bottom:5px;}
+.page-desc{font-size:13px;color:var(--muted);margin-bottom:22px;}
+
+/* ── CARDS ── */
+.cards-row{display:grid;gap:14px;margin-bottom:20px;}
+.c4{grid-template-columns:repeat(4,1fr);}
+.c3{grid-template-columns:repeat(3,1fr);}
+.c2{grid-template-columns:repeat(2,1fr);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;}
+.stat-card{display:flex;flex-direction:column;gap:5px;}
+.stat-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+.stat-card .val{font-size:30px;font-weight:700;}
+.stat-card .s{font-size:12px;color:var(--muted);}
+.val.critical{color:var(--critical);}
+.val.high{color:var(--high);}
+.val.med{color:var(--medium);}
+.val.good{color:var(--ok);}
+
+/* ── SECTION HEADER ── */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.sh h2{font-size:15px;font-weight:600;}
+.badge{background:var(--accent);color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;}
+
+/* ── CHART ── */
+.chart-wrap canvas{max-height:310px;}
+
+/* ── HEATMAP ── */
+.heatmap-wrap{overflow:auto;max-height:620px;}
+.hm-table{border-collapse:collapse;width:100%;font-size:12px;}
+.hm-table th{padding:7px 8px;text-align:center;font-weight:600;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;}
+.hm-table th.rh{text-align:left;min-width:170px;left:0;z-index:3;}
+.hm-table td{padding:5px 5px;text-align:center;border:1px solid rgba(255,255,255,.03);}
+.hm-table td.rl{text-align:left;padding:5px 10px;font-weight:500;color:var(--muted);white-space:nowrap;position:sticky;left:0;background:var(--surface);z-index:1;}
+.c-ok{background:rgba(46,213,115,.18);color:#2ed573;border-radius:3px;}
+.c-miss{background:rgba(255,71,87,.18);color:#ff4757;border-radius:3px;}
+.c-anom{background:rgba(255,217,61,.18);color:#ffd93d;border-radius:3px;}
+.c-zero{background:rgba(255,107,51,.12);color:#ff6b35;border-radius:3px;}
+.c-unit{background:rgba(108,99,255,.2);color:#a29bfe;border-radius:3px;}
+.c-nd{background:rgba(255,255,255,.02);color:var(--muted);border-radius:3px;}
+
+/* ── ISSUES TABLE ── */
+.it{width:100%;border-collapse:collapse;font-size:13px;}
+.it th{padding:9px 12px;text-align:left;background:var(--surface2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);}
+.it td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top;}
+.it tr:hover td{background:rgba(108,99,255,.04);}
+.bs{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;}
+.bs-Critical{background:rgba(255,71,87,.2);color:var(--critical);}
+.bs-High{background:rgba(255,99,72,.2);color:var(--high);}
+.bs-Medium{background:rgba(255,217,61,.2);color:var(--medium);}
+.bs-Low{background:rgba(46,213,115,.2);color:var(--ok);}
+.bt{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:var(--surface2);color:var(--muted);}
+.bt-mom{background:rgba(255,159,67,.15);color:#ff9f43;} /* MoM Anomaly badge */
+
+/* ── SCORECARD GRID ── */
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:12px;}
+.bu-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:15px;cursor:pointer;transition:all .2s;}
+.bu-card:hover{border-color:var(--accent);transform:translateY(-2px);}
+.bu-name{font-size:13px;font-weight:600;margin-bottom:9px;}
+.score-val{font-size:22px;font-weight:700;}
+.sc-good{color:var(--ok);}
+.sc-mid{color:var(--medium);}
+.sc-bad{color:var(--critical);}
+.bar-bg{height:5px;background:var(--surface2);border-radius:3px;margin:7px 0;}
+.bar-fg{height:5px;border-radius:3px;}
+.bu-meta{display:flex;gap:10px;font-size:11px;color:var(--muted);margin-top:7px;}
+
+/* ── FILTERS ── */
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+select,input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 12px;font-size:13px;outline:none;cursor:pointer;}
+select:focus,input:focus{border-color:var(--accent);}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer;font-weight:600;transition:opacity .2s;}
+.btn:hover{opacity:.85;}
+.btn-ol{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-ol:hover{border-color:var(--accent);color:var(--text);}
+
+/* ── LEGEND ── */
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:12px;}
+.legend-i{display:flex;align-items:center;gap:6px;}
+.ld{width:10px;height:10px;border-radius:2px;}
+
+/* ── SCROLLABLE ── */
+.scroll-lg{max-height:680px;overflow-y:auto;}
+.no-data{text-align:center;padding:40px;color:var(--muted);}
+
+/* ── TREND ANOM FLAGS ── */
+.af{margin-bottom:4px;padding:6px 10px;background:rgba(255,217,61,.07);border-left:3px solid var(--medium);border-radius:4px;font-size:12px;}
+
+@media(max-width:860px){.c4{grid-template-columns:repeat(2,1fr);}.sidebar{display:none;}}
+
+/* ── ACTION CENTER ── */
+.ac-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:12px;transition:border-color .2s;}
+.ac-card:hover{border-color:rgba(108,99,255,.4);}
+.ac-card.communicated{opacity:.5;border-style:dashed;}
+.ac-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;}
+.ac-badge{padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;margin-top:2px;}
+.ac-badge-Critical{background:rgba(255,71,87,.2);color:#ff4757;}
+.ac-badge-High{background:rgba(255,99,72,.2);color:#ff6348;}
+.ac-badge-Medium{background:rgba(255,217,61,.2);color:#ffd93d;}
+.ac-badge-Low{background:rgba(46,213,115,.2);color:#2ed573;}
+.ac-title{font-size:14px;font-weight:700;flex:1;}
+.ac-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+.ac-data-row{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:13px;}
+.ac-data-item .dl{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.6px;}
+.ac-data-item .dv{font-size:15px;font-weight:700;margin-top:2px;}
+.ac-cause{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--border);}
+.ac-cause strong{color:var(--medium);}
+.ac-msg-box{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted);line-height:1.7;font-style:italic;}
+.ac-actions{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;}
+.status-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;transition:all .2s;}
+.status-Open{background:rgba(255,71,87,.1);color:#ff4757;border-color:rgba(255,71,87,.3);}
+.status-Communicated{background:rgba(255,217,61,.1);color:#ffd93d;border-color:rgba(255,217,61,.3);}
+.status-Resolved{background:rgba(46,213,115,.1);color:#2ed573;border-color:rgba(46,213,115,.3);}
+.status-Dismissed{background:rgba(139,143,168,.1);color:#8b8fa8;border-color:rgba(139,143,168,.3);}
+.copy-msg-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .2s;}
+.copy-msg-btn:hover{border-color:var(--accent);color:var(--text);}
+/* ── CLIENT REPORT ── */
+.report-box{background:#fff;color:#1a1a2e;border-radius:10px;padding:32px 36px;font-family:Arial,sans-serif;font-size:13px;line-height:1.8;max-height:70vh;overflow:auto;}
+.report-box h1{font-size:20px;font-weight:700;margin-bottom:4px;}
+.report-box h2{font-size:14px;font-weight:700;margin:20px 0 8px;border-bottom:2px solid #2e3250;padding-bottom:4px;color:#1a1d2e;}
+.report-box h3{font-size:13px;font-weight:700;margin:12px 0 4px;color:#3a3d5e;}
+.report-box table{border-collapse:collapse;width:100%;margin:10px 0;}
+.report-box th{background:#f0f0f8;padding:6px 10px;text-align:left;font-size:12px;border:1px solid #ddd;}
+.report-box td{padding:6px 10px;font-size:12px;border:1px solid #ddd;}
+.rb-critical{color:#cc0022;font-weight:700;}
+.rb-high{color:#cc4400;font-weight:700;}
+.rb-ok{color:#007744;}
+/* ── CROSS-BU COMPARE ── */
+.cmp-tbl{border-collapse:collapse;width:100%;font-size:12px;}
+.cmp-tbl th{padding:8px 10px;text-align:center;background:var(--surface2);color:var(--muted);font-size:11px;text-transform:uppercase;border:1px solid var(--border);}
+.cmp-tbl th.ch-bu{text-align:left;min-width:160px;}
+.cmp-tbl td{padding:8px 10px;text-align:center;border:1px solid rgba(255,255,255,.05);}
+.cmp-tbl td.c-bu{text-align:left;font-weight:600;color:var(--text);}
+.cmp-hi{background:rgba(255,71,87,.12);color:#ff4757;}
+.cmp-lo{background:rgba(255,217,61,.10);color:#ffd93d;}
+.cmp-ok{background:rgba(46,213,115,.06);}
+.cmp-zero{background:rgba(255,107,51,.12);color:#ff6b35;}
+.cmp-miss{background:rgba(255,71,87,.06);color:var(--muted);}
+/* ── TRACKER ── */
+.trk-note{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text);width:100%;margin-top:6px;resize:none;}
+.trk-note:focus{outline:none;border-color:var(--accent);}
+.trk-stamp{font-size:10px;color:var(--muted);margin-top:4px;}
+/* ── DATA INSPECTOR ── */
+.di-wrap{overflow:auto;max-height:620px;}
+.di-tbl{border-collapse:collapse;font-size:12px;min-width:900px;width:100%;}
+.di-tbl th{padding:8px 10px;text-align:center;font-weight:600;color:var(--muted);white-space:nowrap;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;}
+.di-tbl th.th-bu{text-align:left;min-width:170px;position:sticky;left:0;top:0;z-index:3;background:var(--surface);}
+.di-tbl td{padding:6px 8px;border:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.di-tbl td.td-bu{font-weight:500;white-space:nowrap;position:sticky;left:0;background:var(--surface2);z-index:1;padding:6px 12px;color:var(--text);}
+.di-tbl tr:hover td{filter:brightness(1.1);}
+.di-v{display:block;font-weight:700;font-size:12.5px;text-align:center;white-space:nowrap;}
+.di-u{display:block;font-size:10px;color:var(--muted);text-align:center;margin-top:1px;}
+/* cell states */
+.di-ok   {background:rgba(46,213,115,.06);}
+.di-miss {background:rgba(255,71,87,.18); }
+.di-anom {background:rgba(255,217,61,.15);}
+.di-zero {background:rgba(255,107,51,.13);}
+.di-unit {background:rgba(108,99,255,.18);}
+.di-miss .di-v{color:#ff4757;}
+.di-anom .di-v{color:#ffd93d;}
+.di-zero .di-v{color:#ff6b35;}
+.di-unit .di-v{color:#a29bfe;}
+.di-ok   .di-v{color:var(--text);}
+.di-avg  {background:rgba(0,212,170,.05);}
+.di-avg td{border-top:2px solid var(--border);}
+/* issue detail popup feel */
+.di-tbl td[title]{cursor:help;}
+/* mini badge */
+.mbadge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-right:3px;}
+/* ── YEAR-ON-YEAR ── */
+.di-prev .td-bu{background:rgba(255,255,255,.04)!important;color:var(--muted)!important;}
+.prev-label{font-size:10px;color:var(--muted);font-style:italic;padding-left:6px;}
+.di-pct{display:block;font-size:10px;font-weight:700;text-align:center;margin-top:1px;}
+.di-prev-cell{background:rgba(255,255,255,.02);text-align:center;padding:4px 6px;border:1px solid rgba(255,255,255,.03);}
+.di-prev-cell .di-v{color:var(--muted)!important;font-size:11px;}
+/* heatmap with values */
+.hm-val-mode td:not(.rl){padding:3px 2px;min-width:58px;height:38px;}
+.hm-v{display:block;font-size:10px;font-weight:700;white-space:nowrap;line-height:1.4;}
+.hm-ic{display:block;font-size:9px;line-height:1.1;opacity:.8;}
+/* YoY trend section */
+.yoy-info{margin-top:12px;padding:10px 14px;background:rgba(108,99,255,.07);border-radius:8px;border-left:3px solid var(--accent);display:none;}
+.yoy-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.yoy-chip{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;}
+.yoy-up{background:rgba(255,71,87,.15);color:#ff4757;}
+.yoy-dn{background:rgba(46,213,115,.15);color:#2ed573;}
+.yoy-flat{background:rgba(139,143,168,.1);color:var(--muted);}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     UPLOAD SCREEN
+══════════════════════════════════════════ -->
+<div id="upload-screen">
+  <div class="osh-logo">
+    <div class="logo-box">O</div>
+    <div>
+      <div class="sub">Oren Sustainability Hub</div>
+      <h1>BRSR Data Health Dashboard</h1>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <div class="dz-icon">📂</div>
+    <h2>Upload OSH Excel Export</h2>
+    <p>Drag &amp; drop any client's <strong style="color:var(--text)">OSH Details Export (.xlsx)</strong> here<br>
+       or click below to browse your computer.</p>
+    <label class="btn-upload" for="fileInput">Choose Excel File</label>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="file-info">Works with any company exported from the OSH portal &nbsp;·&nbsp; Processed entirely in your browser — no data leaves your device</div>
+  </div>
+
+  <div class="format-note">
+    <strong>Expected file format (standard OSH portal Details export):</strong>
+    <ul>
+      <li>Sheet named <strong>Report</strong></li>
+      <li>Columns: <strong>Question, Subquestion, DataPoint, BusinessUnit, AnnualData, AnnualUnit, AprilData…MarchData, AprilUnit…MarchUnit</strong></li>
+      <li>Covers BRSR metrics: Energy, Water, Waste, Emissions, HR, Safety</li>
+    </ul>
+  </div>
+
+  <div class="err-box" id="err-box"><strong>⚠ Upload Failed:</strong> <span id="err-msg"></span></div>
+
+  <div class="recent-section" id="recentSection" style="display:none;">
+    <h3>Recently Analyzed</h3>
+    <div class="recent-chips" id="recentChips"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     LOADING SCREEN
+══════════════════════════════════════════ -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div id="loading-msg">Reading Excel file…</div>
+  <div id="loading-progress" style="font-size:13px;color:var(--accent);">Please wait</div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     DASHBOARD WRAPPER
+══════════════════════════════════════════ -->
+<div id="dashboard-wrapper" style="display:none;">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">O</div>
+      <div>
+        <div class="sub">OSH · BRSR Data Health Monitor</div>
+        <h1 id="db-company">—</h1>
+      </div>
+    </div>
+    <div class="right">
+      <div class="meta">
+        <div>FY: <strong id="db-fy">—</strong></div>
+        <div>BUs: <strong id="db-bu-count">—</strong> &nbsp;|&nbsp; Issues: <strong id="db-issue-count">—</strong></div>
+      </div>
+      <button class="btn-new" onclick="resetToUpload()">⬆ Load New File</button>
+    </div>
+  </div>
+
+  <!-- MAIN LAYOUT -->
+  <div class="main">
+    <nav class="sidebar">
+      <h3 style="margin-top:6px;">Navigation</h3>
+      <div class="nav-item active" onclick="showPage('overview')" id="nav-overview"><span class="nav-icon">📊</span> Overview</div>
+      <div class="nav-item" onclick="showPage('scorecards')" id="nav-scorecards"><span class="nav-icon">🏢</span> BU Scorecards</div>
+      <div class="nav-item" onclick="showPage('heatmap')" id="nav-heatmap"><span class="nav-icon">🗺️</span> Data Heatmap</div>
+      <div class="nav-item" onclick="showPage('trends')" id="nav-trends"><span class="nav-icon">📈</span> Monthly Trends</div>
+      <div class="nav-item" onclick="showPage('issues')" id="nav-issues"><span class="nav-icon">⚠️</span> Issues Log</div>
+      <div class="nav-item" onclick="showPage('anomalies')" id="nav-anomalies"><span class="nav-icon">🔴</span> Anomaly Drill-Down</div>
+      <div class="nav-item" onclick="showPage('inspector')" id="nav-inspector"><span class="nav-icon">🔍</span> Data Inspector</div>
+      <div style="padding:8px 18px 4px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(139,143,168,.5);margin-top:6px;">CSM Tools</div>
+      <div class="nav-item" onclick="showPage('actions')" id="nav-actions"><span class="nav-icon">🚨</span> Action Center</div>
+      <div class="nav-item" onclick="showPage('compare')" id="nav-compare"><span class="nav-icon">📊</span> BU Comparison</div>
+      <div class="nav-item" onclick="showPage('tracker')" id="nav-tracker"><span class="nav-icon">✅</span> Issue Tracker</div>
+      <div class="nav-item" onclick="showPage('report')" id="nav-report"><span class="nav-icon">📧</span> Client Report</div>
+      <div style="padding:18px;border-top:1px solid var(--border);margin-top:24px;font-size:11px;color:var(--muted);line-height:1.7;">
+        <strong style="color:var(--text)">Severity</strong><br>
+        🔴 Critical &nbsp; 🟠 High<br>🟡 Medium &nbsp; 🟢 Low
+      </div>
+    </nav>
+
+    <div class="content">
+
+      <!-- ── OVERVIEW ── -->
+      <div class="page active" id="page-overview">
+        <div class="page-title">Data Health Overview</div>
+        <div class="page-desc">Summary of all data quality issues across business units for the selected company.</div>
+        <div class="cards-row c4">
+          <div class="card stat-card"><div class="lbl">Overall Health Score</div><div class="val good" id="kpi-score">—</div><div class="s">Avg across all BUs</div></div>
+          <div class="card stat-card"><div class="lbl">Missing Data Points</div><div class="val critical" id="kpi-missing">—</div><div class="s">Months with no submission</div></div>
+          <div class="card stat-card"><div class="lbl">Anomalies Flagged</div><div class="val med" id="kpi-anomalies">—</div><div class="s">Statistical outliers detected</div></div>
+          <div class="card stat-card"><div class="lbl">Unit Inconsistencies</div><div class="val high" id="kpi-units">—</div><div class="s">Mixed units in same metric</div></div>
+        </div>
+        <div class="cards-row c2">
+          <div class="card"><div class="sh"><h2>Issues by Type</h2></div><div class="chart-wrap"><canvas id="chartIssueType"></canvas></div></div>
+          <div class="card"><div class="sh"><h2>Issues by Severity</h2></div><div class="chart-wrap"><canvas id="chartSeverity"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-bottom:18px;">
+          <div class="sh"><h2>Business Unit Health Score Ranking</h2><span class="badge" id="bu-rank-badge">—</span></div>
+          <div class="chart-wrap"><canvas id="chartBuScores" style="max-height:360px;"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="sh"><h2>Issues by Metric Category</h2></div>
+          <div class="chart-wrap"><canvas id="chartMetricIssues" style="max-height:280px;"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ── SCORECARDS ── -->
+      <div class="page" id="page-scorecards">
+        <div class="page-title">Business Unit Scorecards</div>
+        <div class="page-desc">Health score per BU. Based on data completeness (40%), anomaly count (30%), and unit consistency (20%). Click any card to see its issues.</div>
+        <div class="sc-grid" id="scorecard-grid"></div>
+      </div>
+
+      <!-- ── HEATMAP ── -->
+      <div class="page" id="page-heatmap">
+        <div class="page-title">Data Submission Heatmap</div>
+        <div class="page-desc">Month × Business Unit quality grid. Each cell shows the worst issue for that combination.</div>
+        <div class="legend">
+          <div class="legend-i"><div class="ld" style="background:rgba(46,213,115,.5);"></div>OK</div>
+          <div class="legend-i"><div class="ld" style="background:rgba(255,71,87,.5);"></div>Missing</div>
+          <div class="legend-i"><div class="ld" style="background:rgba(255,217,61,.5);"></div>Anomaly</div>
+          <div class="legend-i"><div class="ld" style="background:rgba(255,107,51,.4);"></div>Zero</div>
+          <div class="legend-i"><div class="ld" style="background:rgba(108,99,255,.5);"></div>Unit Issue</div>
+          <div class="legend-i"><div class="ld" style="background:rgba(255,255,255,.05);"></div>No Metric</div>
+        </div>
+        <div class="filters">
+          <select id="hm-metric" onchange="renderHeatmap()"><option value="">All Metrics</option></select>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="heatmap-wrap"><table class="hm-table" id="hm-table"></table></div>
+        </div>
+      </div>
+
+      <!-- ── TRENDS ── -->
+      <div class="page" id="page-trends">
+        <div class="page-title">Monthly Trends</div>
+        <div class="page-desc">Month-on-month data visualization. Anomaly threshold bands shown as dashed lines.</div>
+        <div class="filters">
+          <select id="tr-metric" onchange="renderTrend()"><option value="">Select Metric…</option></select>
+          <select id="tr-bu" onchange="renderTrend()"><option value="ALL">All Business Units</option></select>
+        </div>
+        <div id="tr-card" class="card" style="display:none;">
+          <div class="sh"><h2 id="tr-title">Trend</h2></div>
+          <div class="chart-wrap"><canvas id="chartTrend" style="max-height:380px;"></canvas></div>
+          <div id="tr-flags" style="margin-top:14px;"></div>
+          <div id="tr-yoy" class="yoy-info"></div>
+        </div>
+        <div id="tr-placeholder" class="card"><div class="no-data">Select a metric above to view monthly trends.</div></div>
+      </div>
+
+      <!-- ── ISSUES LOG ── -->
+      <div class="page" id="page-issues">
+        <div class="page-title">Issues Log</div>
+        <div class="page-desc">All flagged data quality issues. Filter, search, and export to CSV.</div>
+        <div class="filters">
+          <select id="if-bu" onchange="filterIssues()"><option value="">All BUs</option></select>
+          <select id="if-metric" onchange="filterIssues()"><option value="">All Metrics</option></select>
+          <select id="if-type" onchange="filterIssues()">
+            <option value="">All Types</option>
+            <option>Missing Data</option><option>Consecutive Gap</option>
+            <option>Anomaly</option><option>MoM Anomaly</option>
+            <option>Unit Inconsistency</option><option>Zero Value</option>
+            <option>Annual YoY Deviation</option>
+          </select>
+          <select id="if-sev" onchange="filterIssues()">
+            <option value="">All Severities</option>
+            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+          </select>
+          <input id="if-search" type="text" placeholder="Search…" oninput="filterIssues()">
+          <button class="btn btn-ol" onclick="exportCSV()">⬇ Export CSV</button>
+        </div>
+        <div class="card" style="padding:0;">
+          <div class="scroll-lg">
+            <table class="it" id="issues-table">
+              <thead><tr><th>#</th><th>Business Unit</th><th>Metric</th><th>Month</th><th>Submitted Value</th><th>Unit</th><th>Issue Type</th><th>Severity</th><th>Details</th></tr></thead>
+              <tbody id="issues-tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">Showing <strong id="issues-count">0</strong> issues</div>
+        </div>
+      </div>
+
+      <!-- ── ANOMALY DRILL-DOWN ── -->
+      <div class="page" id="page-anomalies">
+        <div class="page-title">Anomaly Drill-Down</div>
+        <div class="page-desc">Statistical outliers detected using IQR fencing + Z-score (|Z|&gt;1.5). Select a BU + Metric to see the trend chart with anomaly markers.</div>
+        <div class="filters">
+          <select id="ad-bu" onchange="renderAnomalyDrill()"><option value="">All Business Units</option></select>
+          <select id="ad-metric" onchange="renderAnomalyDrill()"><option value="">All Metrics</option></select>
+        </div>
+        <div class="cards-row c3">
+          <div class="card stat-card"><div class="lbl">Critical Anomalies</div><div class="val critical" id="ad-crit">—</div></div>
+          <div class="card stat-card"><div class="lbl">High Anomalies</div><div class="val high" id="ad-high">—</div></div>
+          <div class="card stat-card"><div class="lbl">Medium / Low</div><div class="val med" id="ad-med">—</div></div>
+        </div>
+        <div class="card" id="ad-chart-card" style="display:none;margin-bottom:18px;">
+          <div class="sh"><h2 id="ad-chart-title">—</h2></div>
+          <div class="chart-wrap"><canvas id="chartAnom" style="max-height:360px;"></canvas></div>
+        </div>
+        <div class="card" style="padding:0;">
+          <div class="scroll-lg">
+            <table class="it" id="ad-table">
+              <thead><tr><th>#</th><th>Business Unit</th><th>Metric</th><th>Month</th><th>Submitted Value</th><th>Unit</th><th>Severity</th><th>Details</th></tr></thead>
+              <tbody id="ad-tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">Showing <strong id="ad-count">0</strong> anomalies</div>
+        </div>
+      </div>
+
+      <!-- ── DATA INSPECTOR ── -->
+      <div class="page" id="page-inspector">
+        <div class="page-title">Data Inspector</div>
+        <div class="page-desc">
+          Actual submitted values for every Business Unit × Month combination. Hover any coloured cell for the exact issue.
+          <br><span style="font-size:12px;">
+            <span style="color:var(--ok)">■</span> OK &nbsp;
+            <span style="color:#ff4757">■</span> Missing &nbsp;
+            <span style="color:#ffd93d">■</span> Anomaly &nbsp;
+            <span style="color:#ff6b35">■</span> Zero submitted &nbsp;
+            <span style="color:#a29bfe">■</span> Unit inconsistency &nbsp;
+            <span style="color:var(--muted)">■</span> No metric data
+          </span>
+        </div>
+
+        <div class="filters">
+          <select id="di-metric" onchange="renderDataInspector()"><option value="">— Select a Metric —</option></select>
+        </div>
+
+        <!-- Per-metric KPIs -->
+        <div class="cards-row c4" id="di-kpis" style="display:none;">
+          <div class="card stat-card"><div class="lbl">Missing Months</div><div class="val critical" id="di-kpi-miss">—</div><div class="s">No data submitted</div></div>
+          <div class="card stat-card"><div class="lbl">Anomalies</div><div class="val med" id="di-kpi-anom">—</div><div class="s">Unusual values detected</div></div>
+          <div class="card stat-card"><div class="lbl">Unit Issues</div><div class="val high" id="di-kpi-unit">—</div><div class="s">Inconsistent units</div></div>
+          <div class="card stat-card"><div class="lbl">Zero Values</div><div class="val high" id="di-kpi-zero">—</div><div class="s">Submitted as zero</div></div>
+        </div>
+
+        <!-- Main data table -->
+        <div class="card" id="di-table-card" style="padding:0;display:none;margin-bottom:18px;">
+          <div class="sh" style="padding:14px 18px 0;"><h2 id="di-table-title">Submitted Data</h2></div>
+          <div class="di-wrap">
+            <table class="di-tbl" id="di-table"></table>
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);">
+            💡 Hover any highlighted cell to read the exact issue. Last row shows the cross-BU average for each month.
+          </div>
+        </div>
+
+        <div id="di-placeholder" class="card">
+          <div class="no-data">Select a metric above to inspect actual submitted data across all Business Units.</div>
+        </div>
+
+        <!-- Issues for this metric -->
+        <div id="di-issues-panel" style="display:none;">
+          <div class="card" style="padding:0;">
+            <div class="sh" style="padding:14px 18px 0 18px;">
+              <h2 id="di-issues-title">Issues</h2>
+            </div>
+            <div style="overflow:auto;max-height:380px;">
+              <table class="it" id="di-issues-table">
+                <thead><tr><th>#</th><th>Business Unit</th><th>Month</th><th>Submitted Value</th><th>Unit</th><th>Issue Type</th><th>Severity</th><th>Details</th></tr></thead>
+                <tbody id="di-issues-tbody"></tbody>
+              </table>
+            </div>
+            <div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">
+              <strong id="di-issues-count">0</strong> issues found for this metric
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /DATA INSPECTOR -->
+
+      <!-- ══ ACTION CENTER ══ -->
+      <div class="page" id="page-actions">
+        <div class="page-title">Action Center</div>
+        <div class="page-desc">Every issue that needs client follow-up — with inferred cause and a ready-to-send message. Set status to track what's been communicated.</div>
+        <div class="filters">
+          <select id="ac-sev" onchange="renderActionCenter()">
+            <option value="">All Severities</option>
+            <option value="Critical">Critical only</option>
+            <option value="High">High &amp; above</option>
+          </select>
+          <select id="ac-bu" onchange="renderActionCenter()"><option value="">All BUs</option></select>
+          <select id="ac-metric" onchange="renderActionCenter()"><option value="">All Metrics</option></select>
+          <select id="ac-type" onchange="renderActionCenter()">
+            <option value="">All Issue Types</option>
+            <option>Missing Data</option><option>Consecutive Gap</option>
+            <option>Anomaly</option><option>MoM Anomaly</option>
+            <option>Unit Inconsistency</option><option>Zero Value</option>
+            <option>Annual YoY Deviation</option>
+          </select>
+          <select id="ac-status" onchange="renderActionCenter()">
+            <option value="">All Statuses</option>
+            <option>Open</option><option>Communicated</option><option>Resolved</option><option>Dismissed</option>
+          </select>
+        </div>
+        <div class="cards-row c4" style="margin-bottom:18px;">
+          <div class="card stat-card"><div class="lbl">Open</div><div class="val critical" id="ac-kpi-open">—</div></div>
+          <div class="card stat-card"><div class="lbl">Communicated</div><div class="val med" id="ac-kpi-comm">—</div></div>
+          <div class="card stat-card"><div class="lbl">Resolved</div><div class="val good" id="ac-kpi-res">—</div></div>
+          <div class="card stat-card"><div class="lbl">Dismissed</div><div class="val" id="ac-kpi-dis" style="color:var(--muted)">—</div></div>
+        </div>
+        <div id="ac-list"></div>
+        <div id="ac-empty" class="card" style="display:none;"><div class="no-data">No issues match the selected filters.</div></div>
+      </div>
+
+      <!-- ══ BU COMPARISON ══ -->
+      <div class="page" id="page-compare">
+        <div class="page-title">BU Comparison</div>
+        <div class="page-desc">Compare the same metric across all Business Units for every month. Outliers are highlighted automatically relative to the group.</div>
+        <div class="filters">
+          <select id="cmp-metric" onchange="renderCompare()"><option value="">— Select Metric —</option></select>
+        </div>
+        <div id="cmp-table-card" class="card" style="padding:0;display:none;">
+          <div style="overflow:auto;max-height:640px;">
+            <table class="cmp-tbl" id="cmp-table"></table>
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);">
+            🔴 High outlier (>2× avg) &nbsp; 🟡 Low outlier (&lt;0.4× avg) &nbsp; 🟧 Zero &nbsp; — Missing &nbsp; ✓ Normal range
+          </div>
+        </div>
+        <div id="cmp-placeholder" class="card"><div class="no-data">Select a metric above to compare Business Units.</div></div>
+      </div>
+
+      <!-- ══ ISSUE TRACKER ══ -->
+      <div class="page" id="page-tracker">
+        <div class="page-title">Issue Tracker</div>
+        <div class="page-desc">Track which issues have been communicated to the client and which are resolved. Status and notes are saved in your browser.</div>
+        <div class="filters">
+          <select id="trk-sev" onchange="renderTracker()">
+            <option value="">All Severities</option><option>Critical</option><option>High</option><option>Medium</option>
+          </select>
+          <select id="trk-bu" onchange="renderTracker()"><option value="">All BUs</option></select>
+          <select id="trk-status" onchange="renderTracker()">
+            <option value="">All Statuses</option><option>Open</option><option>Communicated</option><option>Resolved</option><option>Dismissed</option>
+          </select>
+          <button class="btn btn-ol" onclick="clearAllTracking()">↺ Reset All Status</button>
+        </div>
+        <div class="cards-row c4">
+          <div class="card stat-card"><div class="lbl">Open</div><div class="val critical" id="trk-kpi-open">—</div></div>
+          <div class="card stat-card"><div class="lbl">Communicated</div><div class="val med" id="trk-kpi-comm">—</div></div>
+          <div class="card stat-card"><div class="lbl">Resolved</div><div class="val good" id="trk-kpi-res">—</div></div>
+          <div class="card stat-card"><div class="lbl">Dismissed</div><div class="val" id="trk-kpi-dis" style="color:var(--muted)">—</div></div>
+        </div>
+        <div class="card" style="padding:0;">
+          <div class="scroll-lg">
+            <table class="it" id="trk-table">
+              <thead><tr><th>Severity</th><th>Business Unit</th><th>Metric</th><th>Month</th><th>Value</th><th>Unit</th><th>Issue</th><th>Status</th><th>Notes</th><th>Updated</th></tr></thead>
+              <tbody id="trk-tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">Showing <strong id="trk-count">0</strong> issues</div>
+        </div>
+      </div>
+
+      <!-- ══ CLIENT REPORT ══ -->
+      <div class="page" id="page-report">
+        <div class="page-title">Client Report Generator</div>
+        <div class="page-desc">Generate a professional data quality report ready to send to the client. Customise scope and copy or print.</div>
+        <div class="filters" style="margin-bottom:18px;">
+          <select id="rpt-scope">
+            <option value="critical">Critical issues only</option>
+            <option value="high">High &amp; Critical</option>
+            <option value="all" selected>All issues</option>
+          </select>
+          <select id="rpt-bu"><option value="">All BUs</option></select>
+          <button class="btn" onclick="generateReport()">⚡ Generate Report</button>
+          <button class="btn btn-ol" onclick="copyReport()">📋 Copy to Clipboard</button>
+          <button class="btn btn-ol" onclick="window.print()">🖨 Print / Save PDF</button>
+        </div>
+        <div id="rpt-area">
+          <div class="card"><div class="no-data">Click "Generate Report" to create a client-facing data quality summary.</div></div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /dashboard-wrapper -->
+
+
+<script>
+// ════════════════════════════════════════════════
+// CONSTANTS
+// ════════════════════════════════════════════════
+const KEY_METRICS = {
+  'Electricity Consumed Current FY':'Electricity Consumption',
+  'Renewable Energy Sources Current FY':'Renewable Energy',
+  'Non-renewable Stationary Combustion Current FY':'Non-Renewable Combustion',
+  'Mobile Combustion Current FY':'Mobile Combustion (Fuel)',
+  'Provide details of the following disclosures related to water, in the following format:':'Water Consumption',
+  'Provide the following details related to water discharged (in kilolitres):':'Water Discharge',
+  'Total Waste generated (in metric tonnes) Current FY':'Waste Generated',
+  'Fugitive Emissions Current FY':'Fugitive Emissions',
+  'Purchased Heat and Electricity Current FY':'Purchased Heat & Electricity',
+  'Details of safety related incidents in current financial year':'Safety Incidents',
+  'Permanent employees':'Permanent Employees',
+  'Wages paid to employees in the current financial year':'Employee Wages',
+};
+const MONTHS = ['April','May','June','July','August','September','October','November','December','January','February','March'];
+const DATA_COLS = MONTHS.map(m=>m+'Data');
+const UNIT_COLS = MONTHS.map(m=>m+'Unit');
+const PREV_DATA_COLS = MONTHS.map(m=>'Previous'+m+'Data');
+const PREV_UNIT_COLS = MONTHS.map(m=>'Previous'+m+'Unit');
+// Previous year subquestion keys (auto-built from KEY_METRICS)
+const KEY_METRICS_PREV = {};
+Object.entries(KEY_METRICS).forEach(([subq,label])=>{
+  if(subq.includes('Current FY')) KEY_METRICS_PREV[subq.replace('Current FY','Previous FY')]=label;
+  if(subq.includes('current financial year')) KEY_METRICS_PREV[subq.replace('current financial year','previous financial year')]=label;
+});
+const COLORS = ['#6c63ff','#00d4aa','#ff6b6b','#ffd93d','#48dbfb','#ff9f43','#a29bfe','#55efc4','#fd79a8','#fdcb6e','#74b9ff','#b2bec3'];
+
+// ════════════════════════════════════════════════
+// ANALYSIS ENGINE
+// ════════════════════════════════════════════════
+function parseNum(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim().replace(/,/g,'');
+  if (!s || s==='nan'||s==='None'||s==='-') return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+function cleanUnit(val) {
+  if (val===null||val===undefined) return '';
+  const s = String(val).trim();
+  return (s==='nan'||s==='None') ? '' : s;
+}
+function anomSeverity(z) {
+  const a=Math.abs(z);
+  if(a>3)return'Critical'; if(a>2)return'High'; if(a>1.5)return'Medium'; return'Low';
+}
+function calcStats(arr) {
+  const sorted=[...arr].sort((a,b)=>a-b);
+  const n=sorted.length;
+  const q1=sorted[Math.floor(n*.25)], q3=sorted[Math.floor(n*.75)];
+  const iqr=q3-q1;
+  const mean=arr.reduce((s,v)=>s+v,0)/n;
+  const std=Math.sqrt(arr.reduce((s,v)=>s+(v-mean)**2,0)/n);
+  return {mean,std,q1,q3,iqr,lower:q1-1.5*iqr,upper:q3+1.5*iqr};
+}
+
+// ── Smart unit normalisation for MoM comparison ──
+// Returns [normalised_value, base_unit_label] or [original_value, original_unit] for unknowns.
+// 'ML' (uppercase) = Megalitre; 'ml' (lowercase) = millilitre (standard SI).
+function normalizeUnit(value, unit) {
+  if (value === null || value === undefined) return null;
+  const raw = String(unit||'').trim().replace(/\.$/,'');
+  // Case-sensitive pre-check: 'ML' means Megalitre (not millilitre)
+  const isMegalitre = /^ML$|^Ml$|^megalit/i.test(raw);
+  const u = raw.toLowerCase().replace(/\s+/g,'').replace(/\.$/,'');
+
+  if (isMegalitre) return [value * 1e3, 'kL'];
+
+  // Volume → kL
+  const VOL={'l':1e-3,'litre':1e-3,'litres':1e-3,'liter':1e-3,'liters':1e-3,
+    'kl':1,'kilolitre':1,'kilolitres':1,'kiloliter':1,'kiloliters':1,
+    'm3':1,'m³':1,'cubicmetre':1,'cubicmeter':1,'cubicmetres':1,'cubicmeters':1,
+    'ml':1e-6,'millilitre':1e-6,'milliliter':1e-6,'millilitres':1e-6,'milliliters':1e-6};
+
+  // Energy → kWh
+  const ENE={'wh':1e-3,'kwh':1,'mwh':1e3,'gwh':1e6,
+    'kj':1/3.6,'mj':1e3/3.6,'gj':1e6/3.6,'tj':1e9/3.6,
+    'kcal':1.163e-3,'mcal':1.163};
+
+  // Mass (waste / fuel) → kg
+  const MAS={'g':1e-3,'kg':1,'t':1e3,'mt':1e3,'tonne':1e3,'tonnes':1e3,
+    'metrictonne':1e3,'metrictonnes':1e3,'metricton':1e3,'metrictons':1e3};
+
+  // CO₂-equivalent → tCO2e
+  const CO2={'kgco2e':1e-3,'kgco2':1e-3,'kgco2eq':1e-3,
+    'tco2e':1,'tco2':1,'mtco2e':1,'tcoe':1,'tco2eq':1};
+
+  if (VOL[u]!==undefined) return [value*VOL[u], 'kL'];
+  if (ENE[u]!==undefined) return [value*ENE[u], 'kWh'];
+  if (MAS[u]!==undefined) return [value*MAS[u], 'kg'];
+  if (CO2[u]!==undefined) return [value*CO2[u], 'tCO2e'];
+  return [value, raw]; // unknown unit — return as-is with original casing
+}
+
+// Compare two (value, unit) pairs after normalisation.
+// Returns {cv, pv, baseUnit} in the same base unit, or null if incomparable.
+function normalisedPair(cv, cu, pv, pu) {
+  const nc = normalizeUnit(cv, cu);
+  const np = normalizeUnit(pv, pu);
+  if (!nc || !np) return null;
+  if (nc[1] === np[1]) return {cv:nc[0], pv:np[0], baseUnit:nc[1]};
+  // Different base units — compare only if original units are the same string (both unknown)
+  if (cu.trim().toLowerCase() === pu.trim().toLowerCase()) return {cv, pv, baseUnit:cu.trim()};
+  return null; // incomparable units — skip
+}
+
+// Detects when a BU is the company itself (annual aggregate row), not a project site.
+// Matches by normalising away Ltd / Limited / Pvt etc. and comparing lowercased tokens.
+function isAnnualBU(bu, company) {
+  const norm = s => s.toLowerCase()
+    .replace(/\s*(limited|ltd\.?|pvt\.?|private|llp|inc\.?|corp\.?|co\.?)\s*/gi, '')
+    .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const nb = norm(bu), nc = norm(company);
+  if (!nb || !nc) return false;
+  if (nb === nc) return true;
+  if (nb.length > 4 && nc.includes(nb)) return true;
+  if (nc.length > 4 && nb.includes(nc)) return true;
+  return false;
+}
+
+function analyzeData(rows) {
+  const setProgress = (msg) => { const el=document.getElementById('loading-progress'); if(el) el.textContent=msg; };
+
+  // Company name
+  const nameRow = rows.find(r => r.Subquestion && String(r.Subquestion).includes('Name of the Listed Entity'));
+  const company = nameRow ? String(nameRow.AnnualData||'Unknown Company').trim() : 'Unknown Company';
+
+  // BUs
+  const buSet = new Set();
+  rows.forEach(r => { const b=r.BusinessUnit; if(b&&String(b).trim()&&String(b)!=='nan') buSet.add(String(b).trim()); });
+  const allBUs = [...buSet].sort();
+
+  const issues = [];
+  const metricSummaries = [];
+  let processed = 0;
+
+  for (const [subq, label] of Object.entries(KEY_METRICS)) {
+    setProgress(`Analyzing: ${label} (${++processed}/${Object.keys(KEY_METRICS).length})`);
+
+    let subset = rows.filter(r => String(r.Subquestion||'').trim() === subq);
+    if (subq === 'Electricity Consumed Current FY') {
+      const s2 = subset.filter(r => String(r.DataPoint||'').includes('Electricity Input Consumption'));
+      if (s2.length > 0) subset = s2;
+    }
+
+    for (const bu of allBUs) {
+      const buRows = subset.filter(r => String(r.BusinessUnit||'').trim() === bu);
+      if (!buRows.length) continue;
+      const row = buRows[0];
+
+      const monthlyVals = DATA_COLS.map(c => parseNum(row[c]));
+      const monthlyUnits = UNIT_COLS.map(c => cleanUnit(row[c]));
+      const annualVal = parseNum(row.AnnualData);
+      const annualUnit = cleanUnit(row.AnnualUnit);
+      const hasAny = monthlyVals.some(v=>v!==null) || annualVal !== null;
+      if (!hasAny) continue;
+
+      const annualBU = isAnnualBU(bu, company);
+
+      metricSummaries.push({ bu, metric:label, subquestion:subq, monthlyVals, monthlyUnits,
+        annual:annualVal, annualUnit, isAnnual:annualBU });
+
+      if (!annualBU) {
+        // ── Monthly BU: full month-level quality checks ──
+
+        // 1. Missing / Zero
+        monthlyVals.forEach((v,i) => {
+          if (v===null) issues.push({bu,metric:label,month:MONTHS[i],issue_type:'Missing Data',severity:'High',detail:`No data submitted for ${MONTHS[i]}`,value:null});
+          else if (v===0) issues.push({bu,metric:label,month:MONTHS[i],issue_type:'Zero Value',severity:'Medium',detail:`Zero value for ${MONTHS[i]} — verify if intentional`,value:0});
+        });
+
+        // 2. Anomaly detection
+        const valid = monthlyVals.filter(v=>v!==null&&v>0);
+        if (valid.length >= 3) {
+          const st = calcStats(valid);
+          monthlyVals.forEach((v,i) => {
+            if (v===null||v===0) return;
+            const z = st.std>0 ? (v-st.mean)/st.std : 0;
+            const iqrOut = v<st.lower || v>st.upper;
+            if (Math.abs(z)>1.5 || iqrOut) {
+              const dir = v>st.mean?'spike':'drop';
+              const pct = st.mean>0 ? ((v-st.mean)/st.mean*100).toFixed(0) : 0;
+              const fmt = n => n.toLocaleString(undefined,{maximumFractionDigits:2});
+              issues.push({bu,metric:label,month:MONTHS[i],issue_type:'Anomaly',severity:anomSeverity(z),
+                detail:`Unusual ${dir}: ${fmt(v)} vs avg ${fmt(st.mean)} (${pct>0?'+':''}${pct}%)`,value:v});
+            }
+          });
+        }
+
+        // 3. Monthly unit inconsistency
+        const valUnits = monthlyUnits.filter(u=>u);
+        const uniUnits = [...new Set(valUnits)];
+        if (uniUnits.length > 1) {
+          const um = {};
+          MONTHS.forEach((m,i)=>{ if(monthlyUnits[i]){if(!um[monthlyUnits[i]])um[monthlyUnits[i]]=[];um[monthlyUnits[i]].push(m);}});
+          const det = Object.entries(um).map(([u,ms])=>`${u}: ${ms.join(', ')}`).join('; ');
+          issues.push({bu,metric:label,month:'Multiple',issue_type:'Unit Inconsistency',severity:'Critical',detail:`Mixed units in monthly data: ${det}`,value:null});
+        }
+
+        // 4. Month-on-Month (MoM) anomaly detection
+        // Compare each month against its direct predecessor, with smart unit conversion.
+        for (let mi = 1; mi < 12; mi++) {
+          const cv = monthlyVals[mi], cu = monthlyUnits[mi] || '';
+          const pv = monthlyVals[mi-1], pu = monthlyUnits[mi-1] || '';
+          // Skip if either side is missing or zero (zero already flagged separately)
+          if (cv === null || cv === 0 || pv === null || pv === 0) continue;
+          const pair = normalisedPair(cv, cu, pv, pu);
+          if (!pair) continue; // incomparable units
+          const {cv:cvN, pv:pvN, baseUnit} = pair;
+          if (pvN === 0) continue;
+          const ratio = cvN / pvN;
+          let momSev = null;
+          if      (ratio >= 10 || ratio <= 0.1)  momSev = 'High';
+          else if (ratio >= 5  || ratio <= 0.2)  momSev = 'Medium';
+          if (!momSev) continue;
+          const isSpike = ratio > 1;
+          const pct = isSpike
+            ? ((ratio-1)*100).toFixed(0)
+            : ((1/ratio-1)*100).toFixed(0);
+          const fmt = n=>n.toLocaleString(undefined,{maximumFractionDigits:2});
+          // Show normalised values when units differ, raw otherwise
+          const cvShow = (cu!==pu && baseUnit!==cu) ? `${fmt(cvN)} ${baseUnit}` : `${fmt(cv)} ${cu}`;
+          const pvShow = (cu!==pu && baseUnit!==pu) ? `${fmt(pvN)} ${baseUnit}` : `${fmt(pv)} ${pu}`;
+          issues.push({bu,metric:label,month:MONTHS[mi],issue_type:'MoM Anomaly',severity:momSev,
+            detail:`MoM ${isSpike?'spike':'drop'}: ${cvShow} in ${MONTHS[mi]} vs ${pvShow} in ${MONTHS[mi-1]} (${isSpike?'+':'−'}${pct}% change)`,
+            value:cv, prevMonth:MONTHS[mi-1], prevValue:pv, prevUnit:pu, normRatio:ratio});
+        }
+
+      } else {
+        // ── Annual BU: only validate the annual total (no month-to-month comparison) ──
+        if (annualVal === null) {
+          issues.push({bu,metric:label,month:'Annual',issue_type:'Missing Data',severity:'High',
+            detail:`No annual data submitted for ${label}`,value:null,isAnnual:true});
+        } else if (annualVal === 0) {
+          issues.push({bu,metric:label,month:'Annual',issue_type:'Zero Value',severity:'Medium',
+            detail:`Annual total is zero for ${label} — verify if intentional`,value:0,isAnnual:true});
+        }
+      }
+
+      // Note: annual vs monthly unit comparison is intentionally excluded.
+    }
+  }
+
+  // Scores
+  const scores = {};
+  const totalPossible = Object.keys(KEY_METRICS).length * 12;
+  allBUs.forEach(bu => {
+    const annBU = metricSummaries.some(m=>m.bu===bu&&m.isAnnual);
+    const bi = issues.filter(i=>i.bu===bu);
+    const hasData = metricSummaries.some(m=>m.bu===bu);
+    const miss = bi.filter(i=>i.issue_type==='Missing Data').length;
+    const anom = bi.filter(i=>i.issue_type==='Anomaly'||i.issue_type==='MoM Anomaly'||i.issue_type==='Annual YoY Deviation').length;
+    const unit = bi.filter(i=>i.issue_type==='Unit Inconsistency').length;
+    let sc = 100;
+    if (!annBU && totalPossible>0) sc -= (miss/totalPossible)*40; // monthly BUs only
+    sc -= Math.min(anom*3,30);
+    sc -= Math.min(unit*10,20);
+    sc = Math.max(0,Math.min(100,sc));
+    scores[bu] = {score:Math.round(sc*10)/10,missing:miss,anomalies:anom,unit_issues:unit,has_data:hasData,isAnnual:annBU};
+  });
+
+  // ── Consecutive gap detection (monthly BUs only — annual BUs have no meaningful monthly sequence) ──
+  metricSummaries.forEach(s => {
+    if (s.isAnnual) return;
+    let runStart=-1, runLen=0;
+    for (let i=0; i<=MONTHS.length; i++) {
+      const missing = i<MONTHS.length && (s.monthlyVals[i]===null||s.monthlyVals[i]===undefined);
+      if (missing) { if(runStart<0) runStart=i; runLen++; }
+      else {
+        if (runLen>=3) {
+          const mList=MONTHS.slice(runStart,runStart+runLen);
+          issues.push({bu:s.bu,metric:s.metric,month:mList.join(', '),
+            issue_type:'Consecutive Gap',severity:runLen>=5?'Critical':'High',
+            detail:`${runLen} consecutive months with no data: ${MONTHS[runStart]} → ${MONTHS[runStart+runLen-1]}`,value:null});
+        }
+        runStart=-1; runLen=0;
+      }
+    }
+  });
+
+  // ── Data completeness % per BU ──
+  allBUs.forEach(bu=>{
+    if(!scores[bu]) return;
+    const buMs=metricSummaries.filter(m=>m.bu===bu);
+    if (scores[bu].isAnnual) {
+      // Annual BUs: completeness = % of metrics with annual data present
+      const annFilled=buMs.filter(m=>m.annual!==null&&m.annual!==undefined).length;
+      scores[bu].completeness_pct = buMs.length>0 ? Math.round(annFilled/buMs.length*100) : 0;
+      return;
+    }
+    let filled=0,total=0;
+    buMs.forEach(m=>{ MONTHS.forEach((_,i)=>{ total++; if(m.monthlyVals[i]!==null&&m.monthlyVals[i]!==undefined) filled++; }); });
+    scores[bu].completeness_pct = total>0 ? Math.round(filled/total*100) : 0;
+  });
+
+  // ── Previous year data (second pass) ──
+  // Try "Previous FY" subquestion rows
+  for (const [subq, label] of Object.entries(KEY_METRICS_PREV)) {
+    let subset = rows.filter(r => String(r.Subquestion||'').trim() === subq);
+    if (subq.includes('Electricity')) {
+      const s2 = subset.filter(r => String(r.DataPoint||'').includes('Electricity Input Consumption'));
+      if (s2.length > 0) subset = s2;
+    }
+    for (const bu of allBUs) {
+      const buRows = subset.filter(r => String(r.BusinessUnit||'').trim() === bu);
+      if (!buRows.length) continue;
+      const row = buRows[0];
+      const prevVals = DATA_COLS.map(c => parseNum(row[c]));
+      const prevUnits = UNIT_COLS.map(c => cleanUnit(row[c]));
+      if (!prevVals.some(v => v !== null)) continue;
+      const existing = metricSummaries.find(m => m.bu === bu && m.metric === label);
+      if (existing && !existing.prevYearVals) {
+        existing.prevYearVals = prevVals;
+        existing.prevYearUnits = prevUnits;
+        existing.prevAnnual = parseNum(row.AnnualData);
+        existing.prevAnnualUnit = cleanUnit(row.AnnualUnit);
+      }
+    }
+  }
+  // Fall back: check PreviousAprilData … PreviousMarchData columns in same rows
+  metricSummaries.forEach(s => {
+    if (s.prevYearVals) return;
+    const subqEntry = Object.entries(KEY_METRICS).find(([k,v]) => v === s.metric);
+    if (!subqEntry) return;
+    let subset = rows.filter(r => String(r.Subquestion||'').trim() === subqEntry[0]);
+    const buRows = subset.filter(r => String(r.BusinessUnit||'').trim() === s.bu);
+    if (!buRows.length) return;
+    const row = buRows[0];
+    const prevVals = PREV_DATA_COLS.map(c => parseNum(row[c]));
+    const prevUnits = PREV_UNIT_COLS.map(c => cleanUnit(row[c]));
+    if (prevVals.some(v => v !== null)) {
+      s.prevYearVals = prevVals;
+      s.prevYearUnits = prevUnits;
+      s.prevAnnual = parseNum(row.PreviousAnnualData);
+      s.prevAnnualUnit = cleanUnit(row.PreviousAnnualUnit);
+    }
+  });
+
+  // ── Annual BU: year-on-year deviation check (needs prev year data from pass above) ──
+  metricSummaries.filter(s=>s.isAnnual&&s.annual!==null&&s.prevAnnual!==null).forEach(s=>{
+    const pct = (s.annual - s.prevAnnual) / s.prevAnnual * 100;
+    if (Math.abs(pct) >= 20) {
+      const dir = pct>0 ? 'increase' : 'decrease';
+      const sev = Math.abs(pct) >= 50 ? 'High' : 'Medium';
+      const fmt = n=>n.toLocaleString(undefined,{maximumFractionDigits:2});
+      issues.push({bu:s.bu,metric:s.metric,month:'Annual',issue_type:'Annual YoY Deviation',severity:sev,
+        detail:`Annual ${dir} of ${Math.abs(pct).toFixed(0)}%: ${fmt(s.annual)} ${s.annualUnit} vs prev year ${fmt(s.prevAnnual)} ${s.prevAnnualUnit}`,
+        value:s.annual,isAnnual:true});
+    }
+  });
+
+  return {company,allBUs,issues,metricSummaries,completenessScores:scores,metrics:Object.values(KEY_METRICS)};
+}
+
+// ════════════════════════════════════════════════
+// FILE HANDLING
+// ════════════════════════════════════════════════
+function showScreen(name) {
+  document.getElementById('upload-screen').style.display      = name==='upload'    ? 'flex'  : 'none';
+  document.getElementById('loading-screen').style.display     = name==='loading'   ? 'flex'  : 'none';
+  document.getElementById('dashboard-wrapper').style.display  = name==='dashboard' ? 'block' : 'none';
+}
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.xlsx?$/i)) {
+    document.getElementById('err-msg').textContent = 'Please upload an .xlsx file exported from the OSH portal.';
+    document.getElementById('err-box').style.display = 'block';
+    return;
+  }
+  document.getElementById('err-box').style.display = 'none';
+  showScreen('loading');
+  document.getElementById('loading-msg').textContent = `Reading: ${file.name}`;
+  document.getElementById('loading-progress').textContent = 'Parsing Excel…';
+
+  setTimeout(() => { // allow UI to paint
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const sheetName = wb.SheetNames.find(s=>s.toLowerCase()==='report') || wb.SheetNames[0];
+        if (!sheetName) throw new Error('No "Report" sheet found in this file.');
+        document.getElementById('loading-progress').textContent = 'Converting to rows…';
+        setTimeout(() => {
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, {defval:null});
+          // Normalize header spaces
+          const normRows = rows.map(r => {
+            const out={};
+            Object.entries(r).forEach(([k,v])=>{ out[k.trim()]=v; });
+            return out;
+          });
+          document.getElementById('loading-progress').textContent = 'Running analysis…';
+          setTimeout(() => {
+            try {
+              const result = analyzeData(normRows);
+              saveRecent(result.company, file.name);
+              showScreen('dashboard');   // show first so Chart.js has visible canvas
+              initDashboard(result);
+            } catch(err) {
+              showScreen('upload');
+              document.getElementById('err-msg').textContent = 'Error: ' + err.message;
+              document.getElementById('err-box').style.display = 'block';
+              console.error('BRSR analysis error:', err);
+            }
+          }, 60);
+        }, 60);
+      } catch(err) {
+        showScreen('upload');
+        document.getElementById('err-msg').textContent = 'Could not read file: ' + err.message + ' — Make sure this is a valid OSH portal Details export (.xlsx).';
+        document.getElementById('err-box').style.display = 'block';
+        console.error('File read error:', err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, 80);
+}
+
+// Drag & Drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', ()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('fileInput').addEventListener('change', e=>handleFile(e.target.files[0]));
+
+// Recent companies (localStorage)
+function saveRecent(company, fname) {
+  try {
+    const key='osh_recent'; const list=JSON.parse(localStorage.getItem(key)||'[]');
+    const existing=list.findIndex(x=>x.company===company);
+    if(existing>=0) list.splice(existing,1);
+    list.unshift({company,fname,date:new Date().toLocaleDateString('en-IN')});
+    if(list.length>6) list.pop();
+    localStorage.setItem(key,JSON.stringify(list));
+  } catch(e){}
+}
+function loadRecent() {
+  try {
+    const list=JSON.parse(localStorage.getItem('osh_recent')||'[]');
+    if(!list.length) return;
+    const sec=document.getElementById('recentSection');
+    const chips=document.getElementById('recentChips');
+    chips.innerHTML='';
+    list.forEach(x=>{
+      const c=document.createElement('div');
+      c.className='chip';
+      c.title=`Last analyzed: ${x.date}`;
+      c.textContent=`${x.company} · ${x.date}`;
+      chips.appendChild(c);
+    });
+    sec.style.display='';
+  } catch(e){}
+}
+function resetToUpload() {
+  // Destroy charts
+  Object.values(chartInstances).forEach(c=>{try{c.destroy();}catch(e){}});
+  Object.keys(chartInstances).forEach(k=>delete chartInstances[k]);
+  trendChart=null; anomChart=null;
+  // Reset filter dropdowns
+  ['if-bu','if-metric','if-sev','if-type','ad-bu','ad-metric','tr-bu','tr-metric','hm-metric'].forEach(id=>{
+    const el=document.getElementById(id); if(el){el.innerHTML=el.innerHTML.split('<option')[0];}
+  });
+  DASH=null;
+  loadRecent();
+  showScreen('upload');
+}
+loadRecent();
+
+// ════════════════════════════════════════════════
+// DASHBOARD STATE
+// ════════════════════════════════════════════════
+let DASH = null;
+const chartInstances = {};
+let trendChart = null;
+let anomChart = null;
+
+function scoreColor(s) { return s>=80?'#2ed573':s>=60?'#ffd93d':'#ff4757'; }
+function scoreClass(s) { return s>=80?'sc-good':s>=60?'sc-mid':'sc-bad'; }
+
+// ════════════════════════════════════════════════
+// INIT DASHBOARD
+// ════════════════════════════════════════════════
+function initDashboard(data) {
+  DASH = data;
+  // Header
+  document.getElementById('db-company').textContent = data.company;
+  document.getElementById('db-fy').textContent = 'FY 2024-25 (Apr–Mar)';
+  document.getElementById('db-bu-count').textContent = data.allBUs.length;
+  document.getElementById('db-issue-count').textContent = data.issues.length;
+
+  showPage('overview');
+  initScorecards();
+  initFilters();
+  populateHmMetric();
+  populateDiMetric();
+  populateActionFilters();
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.getElementById('nav-'+id).classList.add('active');
+  if(id==='overview')   renderOverview();
+  if(id==='heatmap')    renderHeatmap();
+  if(id==='trends')     populateTrendControls();
+  if(id==='anomalies')  renderAnomalyDrill();
+  if(id==='inspector')  populateDiMetric();
+  if(id==='actions')    renderActionCenter();
+  if(id==='compare')    populateCmpMetric();
+  if(id==='tracker')    renderTracker();
+  if(id==='report')     populateRptControls();
+}
+
+// ════════════════════════════════════════════════
+// OVERVIEW
+// ════════════════════════════════════════════════
+function renderOverview() {
+  const {issues,completenessScores,allBUs} = DASH;
+  const busWithData = allBUs.filter(b=>completenessScores[b]&&completenessScores[b].has_data);
+  const avgScore = busWithData.length ? (busWithData.reduce((s,b)=>s+completenessScores[b].score,0)/busWithData.length).toFixed(1) : '—';
+
+  const miss = issues.filter(i=>i.issue_type==='Missing Data').length;
+  const anom = issues.filter(i=>i.issue_type==='Anomaly').length;
+  const unit = issues.filter(i=>i.issue_type==='Unit Inconsistency').length;
+
+  document.getElementById('kpi-score').textContent = avgScore+'/100';
+  document.getElementById('kpi-score').className = 'val '+(avgScore>=80?'good':avgScore>=60?'med':'critical');
+  document.getElementById('kpi-missing').textContent = miss;
+  document.getElementById('kpi-anomalies').textContent = anom;
+  document.getElementById('kpi-units').textContent = unit;
+  document.getElementById('bu-rank-badge').textContent = busWithData.length + ' BUs';
+
+  const mk = id => {
+    if(chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+    return document.getElementById(id);
+  };
+
+  // Issue type doughnut
+  const typeCount = {};
+  issues.forEach(i=>typeCount[i.issue_type]=(typeCount[i.issue_type]||0)+1);
+  chartInstances['chartIssueType'] = new Chart(mk('chartIssueType'),{
+    type:'doughnut',
+    data:{labels:Object.keys(typeCount),datasets:[{data:Object.values(typeCount),backgroundColor:COLORS,borderWidth:0}]},
+    options:{plugins:{legend:{position:'bottom',labels:{color:'#8b8fa8',font:{size:12}}}},cutout:'65%'}
+  });
+
+  // Severity doughnut
+  const sevCount={Critical:0,High:0,Medium:0,Low:0};
+  issues.forEach(i=>sevCount[i.severity]=(sevCount[i.severity]||0)+1);
+  chartInstances['chartSeverity'] = new Chart(mk('chartSeverity'),{
+    type:'doughnut',
+    data:{labels:Object.keys(sevCount),datasets:[{data:Object.values(sevCount),backgroundColor:['#ff4757','#ff6348','#ffd93d','#2ed573'],borderWidth:0}]},
+    options:{plugins:{legend:{position:'bottom',labels:{color:'#8b8fa8',font:{size:12}}}},cutout:'65%'}
+  });
+
+  // BU scores bar
+  const buSorted=[...busWithData].sort((a,b)=>completenessScores[a].score-completenessScores[b].score);
+  chartInstances['chartBuScores'] = new Chart(mk('chartBuScores'),{
+    type:'bar',
+    data:{labels:buSorted,datasets:[{label:'Health Score',data:buSorted.map(b=>completenessScores[b].score),backgroundColor:buSorted.map(b=>scoreColor(completenessScores[b].score)),borderRadius:4}]},
+    options:{indexAxis:'y',scales:{x:{min:0,max:100,grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}},y:{grid:{display:false},ticks:{color:'#e8eaf6',font:{size:12}}}},plugins:{legend:{display:false}}}
+  });
+
+  // Issues by metric
+  const mCount={};
+  issues.forEach(i=>mCount[i.metric]=(mCount[i.metric]||0)+1);
+  const mEnt=Object.entries(mCount).sort((a,b)=>b[1]-a[1]);
+  chartInstances['chartMetricIssues'] = new Chart(mk('chartMetricIssues'),{
+    type:'bar',
+    data:{labels:mEnt.map(e=>e[0]),datasets:[{label:'Issues',data:mEnt.map(e=>e[1]),backgroundColor:'#6c63ff',borderRadius:4}]},
+    options:{scales:{x:{grid:{display:false},ticks:{color:'#8b8fa8',maxRotation:25}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}}},plugins:{legend:{display:false}}}
+  });
+}
+
+// ════════════════════════════════════════════════
+// SCORECARDS
+// ════════════════════════════════════════════════
+function initScorecards() {
+  const grid = document.getElementById('scorecard-grid');
+  grid.innerHTML = '';
+  DASH.allBUs.forEach(bu => {
+    const sc = DASH.completenessScores[bu]||{};
+    const score = sc.score||0;
+    const card = document.createElement('div');
+    card.className='bu-card';
+    const annTag = sc.isAnnual ? '<span style="font-size:9px;background:rgba(108,99,255,.2);color:#a29bfe;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:600;">ANNUAL</span>' : '';
+    const metaLine = sc.isAnnual
+      ? `<span>📅 Annual data only</span><span>⚠️ ${sc.anomalies||0} YoY flags</span>`
+      : `<span>❌ ${sc.missing||0} missing</span><span>⚠️ ${sc.anomalies||0} anomalies</span><span>🔀 ${sc.unit_issues||0} unit</span>`;
+    card.innerHTML=`
+      <div class="bu-name">${bu}${annTag}</div>
+      <div class="score-val ${scoreClass(score)}">${score}</div>
+      <div class="bar-bg"><div class="bar-fg" style="width:${score}%;background:${scoreColor(score)}"></div></div>
+      <div class="bu-meta">${metaLine}</div>
+    `;
+    card.onclick=()=>{ document.getElementById('if-bu').value=bu; filterIssues(); showPage('issues'); };
+    grid.appendChild(card);
+  });
+}
+
+// ════════════════════════════════════════════════
+// HEATMAP
+// ════════════════════════════════════════════════
+function populateHmMetric() {
+  const sel=document.getElementById('hm-metric');
+  sel.innerHTML='<option value="">All Metrics</option>';
+  DASH.metrics.forEach(m=>sel.appendChild(new Option(m,m)));
+}
+
+function renderHeatmap() {
+  const mf = document.getElementById('hm-metric').value;
+  const table = document.getElementById('hm-table');
+  table.innerHTML='';
+  table.className = mf ? 'hm-table hm-val-mode' : 'hm-table';
+
+  const issueMap={};
+  DASH.issues.forEach(i=>{
+    if(mf&&i.metric!==mf) return;
+    const key=i.bu+'|'+i.month;
+    if(!issueMap[key]) issueMap[key]={types:new Set(),worst:0};
+    issueMap[key].types.add(i.issue_type);
+    const w={Critical:4,High:3,Medium:2,Low:1}[i.severity]||0;
+    if(w>issueMap[key].worst) issueMap[key].worst=w;
+  });
+
+  const busToShow = mf
+    ? DASH.allBUs.filter(bu=>DASH.metricSummaries.some(m=>m.bu===bu&&m.metric===mf))
+    : DASH.allBUs;
+
+  const thead=table.createTHead(), hrow=thead.insertRow();
+  const th0=document.createElement('th'); th0.className='rh'; th0.textContent='Business Unit'; hrow.appendChild(th0);
+  MONTHS.forEach(m=>{const th=document.createElement('th');th.textContent=m.substring(0,3);hrow.appendChild(th);});
+  const thS=document.createElement('th');thS.textContent='Score';hrow.appendChild(thS);
+
+  const tbody=table.createTBody();
+  busToShow.forEach(bu=>{
+    const tr=tbody.insertRow();
+    const td0=tr.insertCell();td0.className='rl';td0.textContent=bu;
+    MONTHS.forEach(month=>{
+      const td=tr.insertCell();
+      const key=bu+'|'+month;
+      const info=issueMap[key];
+      let val=null;
+      if(mf){
+        const ms=DASH.metricSummaries.find(m=>m.bu===bu&&m.metric===mf);
+        if(ms) val=ms.monthlyVals[MONTHS.indexOf(month)];
+      }
+      const hasData=mf?val!==null:DASH.metricSummaries.some(m=>m.bu===bu);
+      const hmMs=mf?DASH.metricSummaries.find(m=>m.bu===bu&&m.metric===mf):null;
+      const hmUnit=hmMs&&MONTHS.indexOf(month)>=0?hmMs.monthlyUnits[MONTHS.indexOf(month)]||'':'';
+      const vHtml=mf&&val!==null?`<span class="hm-v">${fmtVal(val)}</span>`:'';
+      if(!hasData&&!info){
+        td.className='c-nd';
+        td.innerHTML=mf?`<span class="hm-v" style="color:var(--muted)">—</span>`:'—';
+      } else if(!info){
+        td.className='c-ok';
+        td.innerHTML=vHtml||(val!==null?'✓':'—');
+      } else {
+        const t=info.types;
+        if(t.has('Unit Inconsistency')){td.className='c-unit';td.innerHTML=`${vHtml}<span class="hm-ic">⚡</span>`;}
+        else if(t.has('Anomaly')){td.className='c-anom';td.innerHTML=`${vHtml}<span class="hm-ic">⚠</span>`;}
+        else if(t.has('Missing Data')){td.className='c-miss';td.innerHTML='<span class="hm-ic">✗</span>';}
+        else if(t.has('Zero Value')){td.className='c-zero';td.innerHTML='<span class="hm-ic">0</span>';}
+        else{td.className='c-ok';td.innerHTML=vHtml||'✓';}
+      }
+      td.title=`${bu} — ${month}${val!==null&&mf?' = '+fmtVal(val)+(hmUnit?' '+hmUnit:''):''}${info?'\nIssues: '+[...info.types].join(', '):''}`;
+    });
+    const sc=DASH.completenessScores[bu]||{};
+    const tdS=tr.insertCell();tdS.style.fontWeight='600';tdS.style.color=scoreColor(sc.score||0);tdS.textContent=sc.score?sc.score.toFixed(0):'—';
+  });
+}
+
+// ════════════════════════════════════════════════
+// TRENDS
+// ════════════════════════════════════════════════
+function populateTrendControls() {
+  const ms=document.getElementById('tr-metric');
+  if(ms.options.length<=1){DASH.metrics.forEach(m=>ms.appendChild(new Option(m,m)));}
+  const bs=document.getElementById('tr-bu');
+  if(bs.options.length<=1){bs.innerHTML='<option value="ALL">All Business Units</option>';DASH.allBUs.forEach(b=>bs.appendChild(new Option(b,b)));}
+}
+
+function renderTrend() {
+  const metric=document.getElementById('tr-metric').value;
+  const bu=document.getElementById('tr-bu').value;
+  if(!metric){document.getElementById('tr-card').style.display='none';document.getElementById('tr-placeholder').style.display='';return;}
+  document.getElementById('tr-card').style.display='';
+  document.getElementById('tr-placeholder').style.display='none';
+  document.getElementById('tr-title').textContent=metric+(bu!=='ALL'?' — '+bu:' — All BUs');
+
+  const datasets=[];
+  const busToChart=bu==='ALL'?DASH.allBUs:[bu];
+  busToChart.forEach((b,idx)=>{
+    const ms=DASH.metricSummaries.find(m=>m.bu===b&&m.metric===metric);
+    if(!ms) return;
+    const c=COLORS[idx%COLORS.length];
+    datasets.push({label:b+' (Current FY)',data:ms.monthlyVals.map(v=>(v===null||isNaN(v))?null:v),borderColor:c,backgroundColor:c+'22',fill:bu!=='ALL',tension:.3,pointRadius:5,pointHoverRadius:8,spanGaps:false});
+    if(ms.prevYearVals&&ms.prevYearVals.some(v=>v!==null)){
+      datasets.push({label:b+' (Prev Year)',data:ms.prevYearVals.map(v=>(v===null||isNaN(v))?null:v),borderColor:c,backgroundColor:'transparent',borderDash:[6,4],borderWidth:1.5,fill:false,tension:.3,pointRadius:3,pointHoverRadius:6,spanGaps:false});
+    }
+  });
+
+  if(trendChart){trendChart.destroy();trendChart=null;}
+  trendChart=new Chart(document.getElementById('chartTrend'),{
+    type:'line',data:{labels:MONTHS,datasets},
+    options:{responsive:true,scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}}},plugins:{legend:{labels:{color:'#e8eaf6',font:{size:12}}},tooltip:{mode:'index',intersect:false}}}
+  });
+
+  const flags=document.getElementById('tr-flags');
+  const af=DASH.issues.filter(i=>i.metric===metric&&i.issue_type==='Anomaly'&&(bu==='ALL'||i.bu===bu));
+  flags.innerHTML=af.length?'<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">⚠️ Anomalies in this metric:</div>'+
+    af.map(a=>{
+      const ams=DASH.metricSummaries.find(m=>m.bu===a.bu&&m.metric===metric);
+      const ami=MONTHS.indexOf(a.month);
+      const aVal=ams&&ami>=0?ams.monthlyVals[ami]:null;
+      const aUnit=ams&&ami>=0?ams.monthlyUnits[ami]||'':'';
+      return `<div class="af"><strong>${a.bu}</strong> — ${a.month}${aVal!==null?' <strong style="color:var(--medium)">('+fmtVal(aVal)+' '+aUnit+')</strong>':''}: ${a.detail}</div>`;
+    }).join(''):'';
+
+  // YoY summary
+  const yoyDiv=document.getElementById('tr-yoy');
+  if(yoyDiv){
+    const chips=[];
+    busToChart.forEach(b=>{
+      const ms=DASH.metricSummaries.find(m=>m.bu===b&&m.metric===metric);
+      if(!ms||!ms.prevYearVals) return;
+      const cur=ms.monthlyVals.filter(v=>v!==null&&v>0).reduce((a,b)=>a+b,0);
+      const prev=ms.prevYearVals.filter(v=>v!==null&&v>0).reduce((a,b)=>a+b,0);
+      if(cur>0&&prev>0){
+        const pct=((cur-prev)/prev*100).toFixed(0);
+        const cls=pct>10?'yoy-up':pct<-10?'yoy-dn':'yoy-flat';
+        chips.push(`<span class="yoy-chip ${cls}">${b}: ${pct>0?'+':''}${pct}% vs Prev Year</span>`);
+      }
+    });
+    if(chips.length){
+      yoyDiv.innerHTML='<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">📅 <strong>Year-on-Year Change</strong> (full year totals):</div><div class="yoy-row">'+chips.join('')+'</div>';
+      yoyDiv.style.display='';
+    } else { yoyDiv.style.display='none'; }
+  }
+}
+
+// ════════════════════════════════════════════════
+// ISSUES LOG
+// ════════════════════════════════════════════════
+function initFilters() {
+  ['if-bu','ad-bu'].forEach(id=>{
+    const s=document.getElementById(id);s.innerHTML='<option value="">All BUs</option>';
+    DASH.allBUs.forEach(b=>s.appendChild(new Option(b,b)));
+  });
+  ['if-metric','ad-metric'].forEach(id=>{
+    const s=document.getElementById(id);s.innerHTML='<option value="">All Metrics</option>';
+    DASH.metrics.forEach(m=>s.appendChild(new Option(m,m)));
+  });
+  filterIssues();
+}
+
+function populateActionFilters() {
+  ['ac-bu','trk-bu','rpt-bu'].forEach(id=>{
+    const s=document.getElementById(id); if(!s) return;
+    s.innerHTML='<option value="">All BUs</option>';
+    DASH.allBUs.forEach(b=>s.appendChild(new Option(b,b)));
+  });
+  ['ac-metric'].forEach(id=>{
+    const s=document.getElementById(id); if(!s) return;
+    s.innerHTML='<option value="">All Metrics</option>';
+    DASH.metrics.forEach(m=>s.appendChild(new Option(m,m)));
+  });
+}
+
+function populateCmpMetric() {
+  const s=document.getElementById('cmp-metric');
+  if(s.options.length<=1){ DASH.metrics.forEach(m=>s.appendChild(new Option(m,m))); }
+}
+
+function populateRptControls() {
+  const s=document.getElementById('rpt-bu');
+  if(s.options.length<=1){ DASH.allBUs.forEach(b=>s.appendChild(new Option(b,b))); }
+}
+
+function filterIssues() {
+  const bu=document.getElementById('if-bu').value;
+  const metric=document.getElementById('if-metric').value;
+  const type=document.getElementById('if-type').value;
+  const sev=document.getElementById('if-sev').value;
+  const search=document.getElementById('if-search').value.toLowerCase();
+
+  const filtered=DASH.issues.filter(i=>
+    (!bu||i.bu===bu)&&(!metric||i.metric===metric)&&(!type||i.issue_type===type)&&
+    (!sev||i.severity===sev)&&(!search||i.bu.toLowerCase().includes(search)||i.metric.toLowerCase().includes(search)||i.detail.toLowerCase().includes(search))
+  );
+  const tbody=document.getElementById('issues-tbody');tbody.innerHTML='';
+  filtered.forEach((i,idx)=>{
+    // Look up actual submitted value + unit from metricSummaries
+    let dispVal='—', dispUnit='—', valColor='var(--muted)';
+    const ms=DASH.metricSummaries.find(m=>m.bu===i.bu&&m.metric===i.metric);
+    if(i.issue_type==='Missing Data'||i.issue_type==='Consecutive Gap'){
+      dispVal='Not submitted'; dispUnit='—'; valColor='var(--critical)';
+    } else if(i.month==='Annual'||i.isAnnual){
+      // Annual BU — show the annual total; never compare monthly figures
+      if(ms&&ms.annual!==null&&ms.annual!==undefined){
+        dispVal=fmtVal(ms.annual); dispUnit=ms.annualUnit||'—';
+        valColor=i.issue_type==='Annual YoY Deviation'?'var(--medium)':i.issue_type==='Zero Value'?'var(--high)':'var(--text)';
+      }
+    } else if(ms){
+      const mi=MONTHS.indexOf(i.month);
+      if(mi>=0){
+        const v=ms.monthlyVals[mi];
+        const u=ms.monthlyUnits[mi]||'—';
+        if(v===null||v===undefined){ dispVal='—'; dispUnit='—'; }
+        else if(v===0){ dispVal='0'; dispUnit=u; valColor='var(--high)'; }
+        else{ dispVal=fmtVal(v); dispUnit=u;
+          if(i.issue_type==='Anomaly') valColor='var(--medium)';          // yellow  — IQR/Z-score
+          else if(i.issue_type==='MoM Anomaly') valColor='#ff9f43';     // orange  — month-on-month
+          else if(i.issue_type==='Unit Inconsistency') valColor='#a29bfe'; // purple
+          else valColor='var(--text)';
+        }
+      }
+    }
+    const tr=tbody.insertRow();
+    tr.innerHTML=`
+      <td style="color:var(--muted)">${idx+1}</td>
+      <td style="font-weight:600">${i.bu}</td>
+      <td>${i.metric}</td>
+      <td>${i.month}</td>
+      <td style="font-weight:700;color:${valColor}">${dispVal}</td>
+      <td style="color:var(--muted)">${dispUnit}</td>
+      <td><span class="bt${i.issue_type==='MoM Anomaly'?' bt-mom':''}">${i.issue_type}</span></td>
+      <td><span class="bs bs-${i.severity}">${i.severity}</span></td>
+      <td style="color:var(--muted);font-size:12px;">${i.detail}</td>`;
+  });
+  document.getElementById('issues-count').textContent=filtered.length;
+}
+
+function exportCSV() {
+  const bu=document.getElementById('if-bu').value, metric=document.getElementById('if-metric').value;
+  const type=document.getElementById('if-type').value, sev=document.getElementById('if-sev').value;
+  const search=document.getElementById('if-search').value.toLowerCase();
+  const filtered=DASH.issues.filter(i=>{
+    if(bu&&i.bu!==bu) return false;
+    if(metric&&i.metric!==metric) return false;
+    if(type&&i.issue_type!==type) return false;
+    if(sev&&i.severity!==sev) return false;
+    if(search&&!(i.bu+i.metric+i.month+i.detail).toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const hdr='Business Unit,Metric,Month,Submitted Value,Unit,Issue Type,Severity,Details';
+  const rows=filtered.map(i=>{
+    let dispVal='Not submitted', dispUnit='';
+    const ms=DASH.metricSummaries.find(m=>m.bu===i.bu&&m.metric===i.metric);
+    if(i.issue_type==='Missing Data'||i.issue_type==='Consecutive Gap'){
+      dispVal='Not submitted'; dispUnit='';
+    } else if(i.month==='Annual'||i.isAnnual){
+      // Annual BU — use annual total in export
+      if(ms&&ms.annual!==null&&ms.annual!==undefined){ dispVal=String(ms.annual); dispUnit=ms.annualUnit||''; }
+    } else if(ms){
+      const mi=MONTHS.indexOf(i.month);
+      if(mi>=0){
+        const v=ms.monthlyVals[mi];
+        const u=ms.monthlyUnits[mi]||'';
+        if(v===null||v===undefined){ dispVal=''; dispUnit=''; }
+        else { dispVal=String(v); dispUnit=u; }
+      }
+    }
+    return [
+      '"'+i.bu.replace(/"/g,'""')+'"',
+      '"'+i.metric.replace(/"/g,'""')+'"',
+      i.month,
+      '"'+dispVal+'"',
+      dispUnit,
+      '"'+i.issue_type+'"',
+      i.severity,
+      '"'+i.detail.replace(/"/g,'""')+'"'
+    ].join(',');
+  });
+  const csv='﻿'+[hdr,...rows].join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`${DASH.company}_BRSR_Issues.csv`;a.click();
+}
+
+// ════════════════════════════════════════════════
+// ANOMALY DRILL-DOWN
+// ════════════════════════════════════════════════
+function renderAnomalyDrill() {
+  const bu=document.getElementById('ad-bu').value;
+  const metric=document.getElementById('ad-metric').value;
+  const anoms=DASH.issues.filter(i=>i.issue_type==='Anomaly'&&(!bu||i.bu===bu)&&(!metric||i.metric===metric));
+
+  document.getElementById('ad-crit').textContent=anoms.filter(a=>a.severity==='Critical').length;
+  document.getElementById('ad-high').textContent=anoms.filter(a=>a.severity==='High').length;
+  document.getElementById('ad-med').textContent=anoms.filter(a=>a.severity==='Medium'||a.severity==='Low').length;
+  document.getElementById('ad-count').textContent=anoms.length;
+
+  const tbody=document.getElementById('ad-tbody');tbody.innerHTML='';
+  anoms.forEach((a,idx)=>{
+    const ams=DASH.metricSummaries.find(m=>m.bu===a.bu&&m.metric===a.metric);
+    const ami=MONTHS.indexOf(a.month);
+    const aVal = ams&&ami>=0 ? ams.monthlyVals[ami] : null;
+    const aUnit = ams&&ami>=0 ? (ams.monthlyUnits[ami]||'—') : '—';
+    const aAvg = (()=>{ if(!ams) return null; const vv=ams.monthlyVals.filter(v=>v!==null&&v>0); return vv.length?vv.reduce((a,b)=>a+b,0)/vv.length:null; })();
+    const tr=tbody.insertRow();
+    tr.innerHTML=`<td style="color:var(--muted)">${idx+1}</td><td style="font-weight:500">${a.bu}</td><td>${a.metric}</td><td>${a.month}</td><td style="font-weight:700;color:var(--medium)">${aVal!==null?fmtVal(aVal):'—'}</td><td style="color:var(--muted)">${aUnit}</td><td><span class="bs bs-${a.severity}">${a.severity}</span></td><td style="color:var(--muted)">${a.detail}${aAvg?` (avg: ${fmtVal(aAvg)})`:''}</td>`;
+  });
+
+  if(bu&&metric) {
+    const ms=DASH.metricSummaries.find(m=>m.bu===bu&&m.metric===metric);
+    if(ms) {
+      document.getElementById('ad-chart-card').style.display='';
+      document.getElementById('ad-chart-title').textContent=`${metric} — ${bu}`;
+      const vals=ms.monthlyVals.map(v=>(v===null||isNaN(v))?null:v);
+      const valid=vals.filter(v=>v!==null&&v>0);
+      const st=valid.length>=2?calcStats(valid):{mean:0,std:0};
+      const ptColors=MONTHS.map(m=>anoms.some(a=>a.month===m)?'#ff4757':'#6c63ff');
+      const ptRadius=MONTHS.map(m=>anoms.some(a=>a.month===m)?9:5);
+      if(anomChart){anomChart.destroy();anomChart=null;}
+      const anomDatasets=[
+        {label:metric+' (Current FY)',data:vals,borderColor:'#6c63ff',backgroundColor:'rgba(108,99,255,.1)',fill:true,tension:.3,pointRadius:ptRadius,pointBackgroundColor:ptColors,spanGaps:false},
+        {label:'Average',data:MONTHS.map(()=>st.mean),borderColor:'#00d4aa',borderDash:[6,3],pointRadius:0},
+        {label:'+1.5σ',data:MONTHS.map(()=>st.mean+1.5*st.std),borderColor:'rgba(255,217,61,.4)',borderDash:[3,3],pointRadius:0},
+        {label:'-1.5σ',data:MONTHS.map(()=>Math.max(0,st.mean-1.5*st.std)),borderColor:'rgba(255,217,61,.4)',borderDash:[3,3],pointRadius:0}
+      ];
+      if(ms.prevYearVals&&ms.prevYearVals.some(v=>v!==null)){
+        anomDatasets.push({label:metric+' (Prev Year)',data:ms.prevYearVals.map(v=>(v===null||isNaN(v))?null:v),borderColor:'#8b8fa8',borderDash:[5,4],borderWidth:1.5,fill:false,tension:.3,pointRadius:3,spanGaps:false});
+      }
+      anomChart=new Chart(document.getElementById('chartAnom'),{
+        type:'line',
+        data:{labels:MONTHS,datasets:anomDatasets},
+        options:{scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8b8fa8'}}},plugins:{legend:{labels:{color:'#e8eaf6',font:{size:12}}},tooltip:{mode:'index',intersect:false}}}
+      });
+    }
+  } else {
+    document.getElementById('ad-chart-card').style.display='none';
+    if(anomChart){anomChart.destroy();anomChart=null;}
+  }
+}
+// ════════════════════════════════════════════════
+// DATA INSPECTOR
+// ════════════════════════════════════════════════
+
+function fmtVal(v) {
+  if (v === null || v === undefined) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + 'M';
+  if (v >= 1000)    return v.toLocaleString(undefined, {maximumFractionDigits:0});
+  return v.toLocaleString(undefined, {maximumFractionDigits:2});
+}
+
+function populateDiMetric() {
+  const sel = document.getElementById('di-metric');
+  if (sel.options.length <= 1) {
+    DASH.metrics.forEach(m => sel.appendChild(new Option(m, m)));
+  }
+}
+
+function renderDataInspector() {
+  const metric = document.getElementById('di-metric').value;
+  const kpis   = document.getElementById('di-kpis');
+  const tCard  = document.getElementById('di-table-card');
+  const iPanel = document.getElementById('di-issues-panel');
+  const ph     = document.getElementById('di-placeholder');
+
+  if (!metric) {
+    kpis.style.display = 'none'; tCard.style.display = 'none';
+    iPanel.style.display = 'none'; ph.style.display = '';
+    return;
+  }
+  ph.style.display = 'none';
+  kpis.style.display = ''; tCard.style.display = ''; iPanel.style.display = '';
+
+  const summaries    = DASH.metricSummaries.filter(m => m.metric === metric);
+  const metricIssues = DASH.issues.filter(i => i.metric === metric);
+
+  // ── KPIs ──
+  document.getElementById('di-kpi-miss').textContent = metricIssues.filter(i=>i.issue_type==='Missing Data').length;
+  document.getElementById('di-kpi-anom').textContent = metricIssues.filter(i=>i.issue_type==='Anomaly').length;
+  document.getElementById('di-kpi-unit').textContent = metricIssues.filter(i=>i.issue_type==='Unit Inconsistency').length;
+  document.getElementById('di-kpi-zero').textContent = metricIssues.filter(i=>i.issue_type==='Zero Value').length;
+  document.getElementById('di-table-title').textContent = `Submitted Data — ${metric}`;
+
+  // ── Build issue lookup: bu|month -> [{issue}] ──
+  const iMap = {};
+  metricIssues.forEach(i => {
+    const k = i.bu + '|' + i.month;
+    if (!iMap[k]) iMap[k] = [];
+    iMap[k].push(i);
+  });
+  const worstOf = (list) => list.sort((a,b) => ({Critical:4,High:3,Medium:2,Low:1}[b.severity] - {Critical:4,High:3,Medium:2,Low:1}[a.severity]))[0];
+  const sevIcon = {Critical:'🔴',High:'🟠',Medium:'🟡',Low:'🟢'};
+
+  // ── Build table ──
+  const table = document.getElementById('di-table');
+  table.innerHTML = '';
+
+  // Header row
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  const mkTh  = (txt, cls) => { const th=document.createElement('th'); th.textContent=txt; if(cls) th.className=cls; hrow.appendChild(th); };
+  mkTh('Business Unit','th-bu');
+  MONTHS.forEach(m => mkTh(m.substring(0,3)));
+  mkTh('Annual');
+
+  // Per-month valid values (for avg row)
+  const monthBuckets = MONTHS.map((_,mi) => summaries.map(s=>s.monthlyVals[mi]).filter(v=>v!==null&&v>0));
+
+  // Data rows
+  const tbody = table.createTBody();
+  summaries.forEach(s => {
+    const tr = tbody.insertRow();
+
+    // BU name
+    const td0 = tr.insertCell(); td0.className = 'td-bu'; td0.textContent = s.bu;
+
+    // Month cells
+    MONTHS.forEach((m, mi) => {
+      const td  = tr.insertCell();
+      const val = s.monthlyVals[mi];
+      const unt = s.monthlyUnits[mi] || '';
+      const issueList = iMap[s.bu + '|' + m] || [];
+      const worst = issueList.length ? worstOf([...issueList]) : null;
+
+      if (val === null || val === undefined) {
+        td.className = 'di-miss';
+        td.innerHTML = `<span class="di-v">—</span><span class="di-u">not submitted</span>`;
+        td.title = `${s.bu} / ${m}: No data submitted`;
+      } else if (val === 0) {
+        td.className = 'di-zero';
+        td.innerHTML = `<span class="di-v">0</span><span class="di-u">${unt}</span>`;
+        td.title = `${s.bu} / ${m}: Zero value — verify if intentional`;
+      } else {
+        const cls = worst ? ({Anomaly:'di-anom','Unit Inconsistency':'di-unit'}[worst.issue_type] || 'di-ok') : 'di-ok';
+        td.className = cls;
+        const icon = worst ? (sevIcon[worst.severity] || '') : '';
+        td.innerHTML = `<span class="di-v">${icon} ${fmtVal(val)}</span><span class="di-u">${unt}</span>`;
+        if (worst) td.title = worst.detail;
+      }
+    });
+
+    // Annual cell
+    const tdA = tr.insertCell();
+    const annIssues = iMap[s.bu + '|Annual vs Monthly'] || [];
+    if (s.annual !== null && s.annual !== undefined) {
+      const annWorst = annIssues.length ? worstOf([...annIssues]) : null;
+      tdA.className = annWorst ? 'di-unit' : 'di-ok';
+      tdA.innerHTML = `<span class="di-v">${fmtVal(s.annual)}</span><span class="di-u">${s.annualUnit||''}</span>`;
+      if (annWorst) tdA.title = annWorst.detail;
+    } else {
+      tdA.className = 'di-miss';
+      tdA.innerHTML = `<span class="di-v">—</span><span class="di-u">no annual</span>`;
+    }
+
+    // ── Previous year comparison row ──
+    if (s.prevYearVals) {
+      const trPrev = tbody.insertRow();
+      trPrev.className = 'di-prev';
+      const tdBu = trPrev.insertCell();
+      tdBu.className = 'td-bu';
+      tdBu.innerHTML = '<span class="prev-label">↩ Prev Year</span>';
+      MONTHS.forEach((m, mi) => {
+        const td = trPrev.insertCell();
+        const pv = s.prevYearVals[mi];
+        const pu = s.prevYearUnits ? (s.prevYearUnits[mi]||'') : '';
+        const cv = s.monthlyVals[mi];
+        if (pv === null || pv === undefined) {
+          td.className = 'di-prev-cell';
+          td.innerHTML = '<span class="di-v">—</span>';
+        } else {
+          let pctHtml = '';
+          if (cv !== null && cv !== undefined && pv > 0) {
+            const pct = ((cv - pv) / pv * 100).toFixed(0);
+            const pctColor = pct > 0 ? '#ff6b6b' : '#2ed573';
+            pctHtml = `<span class="di-pct" style="color:${pctColor}">${pct>0?'+':''}${pct}%</span>`;
+          }
+          td.className = 'di-prev-cell';
+          td.innerHTML = `<span class="di-v">${fmtVal(pv)}</span><span class="di-u">${pu}</span>${pctHtml}`;
+          td.title = `Prev Year: ${fmtVal(pv)} ${pu}`;
+        }
+      });
+      const tdAp = trPrev.insertCell();
+      tdAp.className = 'di-prev-cell';
+      if (s.prevAnnual !== null && s.prevAnnual !== undefined) {
+        tdAp.innerHTML = `<span class="di-v">${fmtVal(s.prevAnnual)}</span><span class="di-u">${s.prevAnnualUnit||''}</span>`;
+      } else {
+        tdAp.innerHTML = '<span class="di-v">—</span>';
+      }
+    }
+  });
+
+  // ── Average stats row ──
+  if (summaries.length > 0) {
+    const trA = tbody.insertRow(); trA.className = 'di-avg';
+    const td0 = trA.insertCell(); td0.className = 'td-bu';
+    td0.innerHTML = '<em style="color:var(--accent2);font-size:12px;">Cross-BU Average</em>';
+    monthBuckets.forEach(vals => {
+      const td = trA.insertCell(); td.style.textAlign = 'center';
+      if (vals.length) {
+        const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+        td.innerHTML = `<span class="di-v" style="color:var(--accent2)">${fmtVal(avg)}</span>`;
+      } else {
+        td.innerHTML = '<span class="di-v" style="color:var(--muted)">—</span>';
+      }
+    });
+    trA.insertCell(); // annual placeholder
+  }
+
+  // ── Issues detail table ──
+  const issuesSorted = [...metricIssues].sort((a,b) =>
+    ({Critical:4,High:3,Medium:2,Low:1}[b.severity] - {Critical:4,High:3,Medium:2,Low:1}[a.severity])
+  );
+  document.getElementById('di-issues-title').textContent = `All Issues for: ${metric}`;
+  document.getElementById('di-issues-count').textContent = issuesSorted.length;
+
+  const ibody = document.getElementById('di-issues-tbody');
+  ibody.innerHTML = '';
+  issuesSorted.forEach((i, idx) => {
+    // Find the actual submitted value for this BU+month
+    let submittedVal = '—', submittedUnit = '—';
+    if (i.issue_type !== 'Missing Data' && i.issue_type !== 'Unit Inconsistency' && i.issue_type !== 'Consecutive Gap') {
+      const ms = DASH.metricSummaries.find(m => m.bu === i.bu && m.metric === metric);
+      if (ms) {
+        const mi = MONTHS.indexOf(i.month);
+        if (mi >= 0) {
+          submittedVal  = ms.monthlyVals[mi]  !== null ? fmtVal(ms.monthlyVals[mi]) : '—';
+          submittedUnit = ms.monthlyUnits[mi] || '—';
+        }
+      }
+    }
+    const tr = ibody.insertRow();
+    tr.innerHTML = `
+      <td style="color:var(--muted)">${idx+1}</td>
+      <td style="font-weight:600">${i.bu}</td>
+      <td>${i.month}</td>
+      <td style="font-weight:700;color:${i.issue_type==='Missing Data'?'#ff4757':i.issue_type==='Zero Value'?'#ff6b35':'var(--text)'}">${submittedVal}</td>
+      <td style="color:var(--muted)">${submittedUnit}</td>
+      <td><span class="bt${i.issue_type==='MoM Anomaly'?' bt-mom':''}">${i.issue_type}</span></td>
+      <td><span class="bs bs-${i.severity}">${i.severity}</span></td>
+      <td style="color:var(--muted);font-size:12px;">${i.detail}</td>
+    `;
+  });
+}
+
+// ════════════════════════════════════════════════
+// HELPERS — CAUSE INFERENCE & SUGGESTED MESSAGE
+// ════════════════════════════════════════════════
+function inferCause(issue, ms) {
+  if (issue.issue_type === 'Missing Data') {
+    if (!ms) return 'No data submitted for this month.';
+    const mi = MONTHS.indexOf(issue.month);
+    const prevNull = mi > 0 && ms.monthlyVals[mi-1] === null;
+    const nextNull = mi < 11 && ms.monthlyVals[mi+1] === null;
+    if (prevNull && nextNull) return 'Part of a consecutive data gap — the stakeholder may have stopped submitting regularly.';
+    if (prevNull || nextNull) return 'Bordering another missing month — possibly intermittent submission or a portal access issue.';
+    return 'Isolated missing month — the stakeholder may have overlooked this submission.';
+  }
+  if (issue.issue_type === 'Consecutive Gap') {
+    return 'Multiple consecutive months with no submission. This usually indicates the stakeholder has not been actively logging data into the portal for an extended period.';
+  }
+  if (issue.issue_type === 'Anomaly' && ms) {
+    const v = issue.value;
+    const valid = ms.monthlyVals.filter(x => x !== null && x > 0 && x !== v);
+    if (!valid.length) return 'No baseline to compare — only one data point available.';
+    const avg = valid.reduce((a,b)=>a+b,0)/valid.length;
+    const ratio = v / avg;
+    if (ratio > 3500 && ratio < 3700)
+      return '🔍 Likely unit confusion: value is ~3,600× the average, which is the exact conversion factor from kWh to kJ (1 kWh = 3,600 kJ). The stakeholder may have entered kJ data in a kWh field.';
+    if (ratio > 950 && ratio < 1050)
+      return '🔍 Likely unit confusion: value is ~1,000× the average — check if MWh was entered instead of kWh, or tonnes instead of kg.';
+    if (ratio > 0.0009 && ratio < 0.0011)
+      return '🔍 Possible unit reversal: value is ~1,000× too low — the stakeholder may have entered kWh instead of MWh.';
+    if (ratio > 2.5)
+      return `Value is ${ratio.toFixed(1)}× above the monthly average. Likely causes: data entry error, incorrect unit selected in the portal, or an actual operational anomaly (e.g. equipment fault, additional activity).`;
+    if (ratio < 0.4)
+      return `Value is ${(1/ratio).toFixed(1)}× below the monthly average. Likely causes: partial month data entered, facility not operational, or a data entry error (e.g. missed a digit).`;
+    return 'Statistically outside the normal range for this BU. Cross-check with the original meter reading or invoice.';
+  }
+  if (issue.issue_type === 'Unit Inconsistency')
+    return 'Different units are used across months for the same metric. This prevents accurate monthly aggregation. The stakeholder likely selected the wrong unit in the OSH portal dropdown for one or more months.';
+  if (issue.issue_type === 'Zero Value')
+    return 'A value of zero was explicitly submitted. This could be correct (e.g. facility was shut, no consumption) or an empty-field placeholder. Needs verification with the stakeholder.';
+  if (issue.issue_type === 'MoM Anomaly') {
+    const r = issue.normRatio || 0;
+    const isSpike = r > 1;
+    const ratio = isSpike ? r : 1/r;
+    if (ratio >= 3500 && ratio <= 3700)
+      return `🔍 Likely unit confusion: the value is ~3,600× the previous month, which is the kWh→kJ conversion factor (1 kWh = 3,600 kJ). The stakeholder may have entered kJ data in a kWh field for ${issue.month}.`;
+    if (ratio >= 950 && ratio <= 1050)
+      return `🔍 Likely unit confusion: value is ~1,000× ${isSpike?'higher':'lower'} than the previous month — check if MWh was entered instead of kWh, or tonnes instead of kg.`;
+    if (ratio >= 8)
+      return `${isSpike?'Spike':'Drop'} of ${ratio.toFixed(0)}× vs previous month is unusually large. Most likely causes: wrong decimal point (e.g. 3,000 entered instead of 30), wrong unit selected in the portal, or the previous month's data was itself incorrect.`;
+    if (ratio >= 3)
+      return `${isSpike?'Increase':'Decrease'} of ${ratio.toFixed(1)}× compared to the previous month. Possible seasonal variation, but worth verifying. Check whether the reading was taken for a partial month or if the unit changed.`;
+    return 'Significant month-on-month change detected. Cross-check with the original meter reading or operational records.';
+  }
+  if (issue.issue_type === 'Annual YoY Deviation' && ms) {
+    if (!ms.prevAnnual) return 'Annual total has changed significantly vs the previous year. Cross-check with operational records.';
+    const pct = ((ms.annual - ms.prevAnnual) / ms.prevAnnual * 100).toFixed(0);
+    const dir = pct > 0 ? 'higher' : 'lower';
+    return `Annual total is ${Math.abs(pct)}% ${dir} than the previous year (${fmtVal(ms.annual)} ${ms.annualUnit} vs ${fmtVal(ms.prevAnnual)} ${ms.prevAnnualUnit}). This may reflect genuine operational change, a correction, or a data entry discrepancy. Please verify against audited records.`;
+  }
+  return 'Data quality issue requires review.';
+}
+
+function suggestedMessage(issue, ms) {
+  const bu = issue.bu, m = issue.month, metric = issue.metric;
+  if (issue.issue_type === 'Missing Data')
+    return `Hi, we noticed that the ${metric} data for ${bu} has not been submitted for ${m}. Kindly log into the OSH portal and submit the data at your earliest convenience so we can include it in your BRSR report.`;
+  if (issue.issue_type === 'Consecutive Gap')
+    return `Hi, we have noticed that ${metric} data for ${bu} is missing for the following months: ${m}. Please submit the pending data as soon as possible. If there were operational reasons for zero consumption, please submit 0 with a note.`;
+  if (issue.issue_type === 'Anomaly' && ms) {
+    const valid = ms.monthlyVals.filter(x=>x!==null&&x>0);
+    const avg = valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : 0;
+    const v = issue.value;
+    const pct = avg>0 ? Math.round((v-avg)/avg*100) : 0;
+    return `Hi, while reviewing your BRSR data submissions, we noticed that the ${metric} figure for ${bu} in ${m} (${fmtVal(v)} ${ms.monthlyUnits[MONTHS.indexOf(m)]||''}) appears ${pct>0?'significantly higher':'significantly lower'} than the average for other months (avg: ${fmtVal(avg)}). Could you please verify this reading and resubmit if there is an error? If this is correct, kindly let us know so we can add a note in the report.`;
+  }
+  if (issue.issue_type === 'Unit Inconsistency')
+    return `Hi, we noticed a unit inconsistency in the ${metric} data submitted for ${bu}. Different units appear to have been used across months, which prevents us from computing accurate annual totals. Please review your submissions in the OSH portal and ensure the same unit is used for all months.`;
+  if (issue.issue_type === 'Zero Value') {
+    if (issue.isAnnual)
+      return `Hi, the annual total for ${metric} submitted for ${bu} is recorded as zero. Could you please confirm if this is accurate for the full financial year, or whether the data needs to be entered?`;
+    return `Hi, the ${metric} data for ${bu} in ${m} has been recorded as zero. Could you please confirm if this is accurate (e.g. the facility was non-operational) or whether the actual reading was not entered? If the value is genuinely zero, no action is needed.`;
+  }
+  if (issue.issue_type === 'MoM Anomaly') {
+    const r = issue.normRatio || 0;
+    const isSpike = r > 1;
+    const pct = isSpike ? Math.round((r-1)*100) : Math.round((1/r-1)*100);
+    const currVal = issue.value !== null ? fmtVal(issue.value) : '?';
+    const currUnit = ms ? (ms.monthlyUnits[MONTHS.indexOf(m)] || '') : '';
+    const prevVal = issue.prevValue !== null && issue.prevValue !== undefined ? fmtVal(issue.prevValue) : '?';
+    const prevUnit = issue.prevUnit || '';
+    return `Hi, while reviewing your BRSR data submissions, we noticed an unusual ${isSpike?'increase':'decrease'} in ${metric} for ${bu}: the figure for ${m} (${currVal} ${currUnit}) is ${pct}% ${isSpike?'higher':'lower'} than the previous month, ${issue.prevMonth||'the preceding month'} (${prevVal} ${prevUnit}). Could you please verify this reading? If the values are correct, a brief note explaining the change would be helpful for the audit trail.`;
+  }
+  if (issue.issue_type === 'Annual YoY Deviation' && ms && ms.prevAnnual) {
+    const pct = Math.round(Math.abs((ms.annual - ms.prevAnnual) / ms.prevAnnual * 100));
+    const dir = ms.annual > ms.prevAnnual ? 'significantly higher' : 'significantly lower';
+    return `Hi, while reviewing your annual BRSR data for ${bu}, we noticed that the ${metric} annual total (${fmtVal(ms.annual)} ${ms.annualUnit}) is ${dir} than the previous year (${fmtVal(ms.prevAnnual)} ${ms.prevAnnualUnit}) — a difference of ${pct}%. Could you please confirm whether this reflects an actual operational change or if there may be a data entry discrepancy?`;
+  }
+  return `Hi, please review the ${metric} data submitted for ${bu} in ${m} and confirm its accuracy.`;
+}
+
+// ════════════════════════════════════════════════
+// ISSUE TRACKING (localStorage)
+// ════════════════════════════════════════════════
+function issueKey(issue) {
+  return [DASH.company, issue.bu, issue.metric, issue.month, issue.issue_type].join('||');
+}
+function getTracking() {
+  try { return JSON.parse(localStorage.getItem('osh_tracking')||'{}'); } catch(e){ return {}; }
+}
+function saveTracking(data) {
+  try { localStorage.setItem('osh_tracking', JSON.stringify(data)); } catch(e){}
+}
+function getStatus(issue) {
+  const t = getTracking();
+  return t[issueKey(issue)] || {status:'Open', note:'', ts:''};
+}
+function setStatus(issue, status, note) {
+  const t = getTracking();
+  const ts = new Date().toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'});
+  t[issueKey(issue)] = {status, note, ts};
+  saveTracking(t);
+}
+function clearAllTracking() {
+  if(confirm('Reset all issue statuses to Open?')) { localStorage.removeItem('osh_tracking'); renderActionCenter(); renderTracker(); }
+}
+
+// ════════════════════════════════════════════════
+// ACTION CENTER
+// ════════════════════════════════════════════════
+const PRIORITY = {Critical:4,High:3,Medium:2,Low:1};
+const SEV_ICON  = {Critical:'🔴',High:'🟠',Medium:'🟡',Low:'🟢'};
+
+function updateAcKpis() {
+  const all = DASH.issues.filter(i=>i.issue_type!=='Zero Value'||true);
+  const statusCounts = {Open:0,Communicated:0,Resolved:0,Dismissed:0};
+  all.forEach(i=>{ const s=getStatus(i).status; statusCounts[s]=(statusCounts[s]||0)+1; });
+  document.getElementById('ac-kpi-open').textContent  = statusCounts.Open;
+  document.getElementById('ac-kpi-comm').textContent  = statusCounts.Communicated;
+  document.getElementById('ac-kpi-res').textContent   = statusCounts.Resolved;
+  document.getElementById('ac-kpi-dis').textContent   = statusCounts.Dismissed;
+}
+
+function renderActionCenter() {
+  updateAcKpis();
+  const sevF    = document.getElementById('ac-sev').value;
+  const buF     = document.getElementById('ac-bu').value;
+  const metF    = document.getElementById('ac-metric').value;
+  const typeF   = document.getElementById('ac-type').value;
+  const statusF = document.getElementById('ac-status').value;
+
+  let issues = [...DASH.issues].sort((a,b)=>PRIORITY[b.severity]-PRIORITY[a.severity]);
+
+  // Severity filter
+  if (sevF==='Critical') issues = issues.filter(i=>i.severity==='Critical');
+  else if (sevF==='High') issues = issues.filter(i=>i.severity==='Critical'||i.severity==='High');
+
+  if (buF)     issues = issues.filter(i=>i.bu===buF);
+  if (metF)    issues = issues.filter(i=>i.metric===metF);
+  if (typeF)   issues = issues.filter(i=>i.issue_type===typeF);
+  if (statusF) issues = issues.filter(i=>getStatus(i).status===statusF);
+
+  // Deduplicate consecutive gaps vs individual missing
+  const cgBuMetrics = new Set(
+    DASH.issues.filter(i=>i.issue_type==='Consecutive Gap').map(i=>i.bu+'|'+i.metric)
+  );
+  // If there's a consecutive gap, suppress individual Missing Data for those months
+  issues = issues.filter(i=>{
+    if(i.issue_type==='Missing Data' && cgBuMetrics.has(i.bu+'|'+i.metric)) return false;
+    return true;
+  });
+
+  const list = document.getElementById('ac-list');
+  const empty = document.getElementById('ac-empty');
+  list.innerHTML = '';
+
+  if (!issues.length) { empty.style.display=''; return; }
+  empty.style.display = 'none';
+
+  issues.forEach(issue => {
+    const ms = DASH.metricSummaries.find(m=>m.bu===issue.bu&&m.metric===issue.metric);
+    const trk = getStatus(issue);
+    const cause = inferCause(issue, ms);
+    const msg   = suggestedMessage(issue, ms);
+    const isCommunicated = trk.status === 'Communicated' || trk.status === 'Resolved' || trk.status === 'Dismissed';
+
+    // Submitted value display
+    let submittedDisplay = '—', unitDisplay = '—';
+    if (issue.issue_type !== 'Missing Data' && issue.issue_type !== 'Consecutive Gap') {
+      if (ms) {
+        const mi = MONTHS.indexOf(issue.month);
+        if (mi>=0 && ms.monthlyVals[mi]!==null) {
+          submittedDisplay = fmtVal(ms.monthlyVals[mi]);
+          unitDisplay = ms.monthlyUnits[mi]||'—';
+        }
+      }
+      if (issue.value !== null && issue.value !== undefined) submittedDisplay = fmtVal(issue.value);
+    }
+
+    // Average for anomaly context
+    let avgDisplay = '';
+    if (issue.issue_type==='Anomaly' && ms) {
+      const valid = ms.monthlyVals.filter(x=>x!==null&&x>0);
+      if(valid.length) avgDisplay = `<div class="ac-data-item"><div class="dl">BU Monthly Avg</div><div class="dv" style="color:var(--accent2)">${fmtVal(valid.reduce((a,b)=>a+b,0)/valid.length)}</div></div>`;
+    }
+
+    const statusOptions = ['Open','Communicated','Resolved','Dismissed'];
+    const statusBtns = statusOptions.map(s=>
+      `<span class="status-badge status-${s}" style="${trk.status===s?'':'opacity:.4;'}" onclick="setStatusAndRefresh(this,'${issueKey(issue)}','${s}')">${s==='Open'?'○':s==='Communicated'?'📤':s==='Resolved'?'✓':'✗'} ${s}</span>`
+    ).join('');
+
+    const key = issueKey(issue);
+    const card = document.createElement('div');
+    card.className = 'ac-card' + (isCommunicated?' communicated':'');
+    card.dataset.key = key;
+    card.innerHTML = `
+      <div class="ac-header">
+        <span class="ac-badge ac-badge-${issue.severity}">${SEV_ICON[issue.severity]} ${issue.severity}</span>
+        <div>
+          <div class="ac-title">${issue.bu} &nbsp;›&nbsp; ${issue.metric}</div>
+          <div class="ac-sub">${issue.issue_type} &nbsp;|&nbsp; <strong>${issue.month}</strong></div>
+        </div>
+      </div>
+      <div class="ac-data-row">
+        <div class="ac-data-item"><div class="dl">Submitted Value</div><div class="dv" style="color:${issue.issue_type==='Missing Data'||issue.issue_type==='Consecutive Gap'?'var(--critical)':'var(--text)'}">${submittedDisplay}</div></div>
+        <div class="ac-data-item"><div class="dl">Unit</div><div class="dv">${unitDisplay}</div></div>
+        ${avgDisplay}
+        <div class="ac-data-item"><div class="dl">Current Status</div><div class="dv"><span class="status-badge status-${trk.status}" style="font-size:11px;">${trk.status}</span></div></div>
+      </div>
+      <div class="ac-cause"><strong>🔍 Likely Cause:</strong> ${cause}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px;">💬 Suggested client message <span style="float:right"><button class="copy-msg-btn" onclick="copyText('${key}-msg')">Copy</button></span></div>
+      <div class="ac-msg-box" id="${key}-msg">${msg}</div>
+      <div class="ac-actions">
+        <span style="font-size:11px;color:var(--muted);margin-right:4px;">Set status:</span>
+        ${statusBtns}
+      </div>
+      ${trk.note ? `<div class="trk-stamp" style="margin-top:8px;">📝 Note: ${trk.note} &nbsp;|&nbsp; ${trk.ts}</div>` : ''}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function setStatusAndRefresh(el, key, status) {
+  // Find the issue
+  const issue = DASH.issues.find(i=>issueKey(i)===key);
+  if(!issue) return;
+  const t=getTracking(); const existing=t[key]||{};
+  t[key]={status,note:existing.note||'',ts:new Date().toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'})};
+  saveTracking(t);
+  renderActionCenter();
+}
+
+function copyText(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    const orig = el.previousElementSibling.querySelector('.copy-msg-btn');
+    if(orig){orig.textContent='Copied!';setTimeout(()=>orig.textContent='Copy',1500);}
+  }).catch(()=>{
+    const r=document.createRange();r.selectNode(el);
+    window.getSelection().removeAllRanges();window.getSelection().addRange(r);
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+  });
+}
+
+// ════════════════════════════════════════════════
+// CROSS-BU COMPARISON
+// ════════════════════════════════════════════════
+function renderCompare() {
+  const metric = document.getElementById('cmp-metric').value;
+  const card = document.getElementById('cmp-table-card');
+  const ph   = document.getElementById('cmp-placeholder');
+  if (!metric) { card.style.display='none'; ph.style.display=''; return; }
+  card.style.display=''; ph.style.display='none';
+
+  const summaries = DASH.metricSummaries.filter(m=>m.metric===metric);
+  if (!summaries.length) { card.style.display='none'; ph.style.display=''; return; }
+
+  // Collect per-month values across all BUs
+  const monthData = MONTHS.map((_,mi)=>{
+    const vals = summaries.map(s=>s.monthlyVals[mi]).filter(v=>v!==null&&v>0);
+    const avg  = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    return {avg, max:vals.length?Math.max(...vals):null, min:vals.length?Math.min(...vals):null};
+  });
+
+  const table = document.getElementById('cmp-table');
+  table.innerHTML='';
+
+  // Header
+  const thead=table.createTHead(), hr=thead.insertRow();
+  const mkTh=(t,cls)=>{const th=document.createElement('th');th.textContent=t;if(cls)th.className=cls;hr.appendChild(th);};
+  mkTh('Business Unit','ch-bu');
+  MONTHS.forEach(m=>mkTh(m.substring(0,3)));
+  mkTh('Annual'); mkTh('Avg/Month');
+
+  const tbody=table.createTBody();
+
+  summaries.sort((a,b)=>a.bu.localeCompare(b.bu)).forEach(s=>{
+    const tr=tbody.insertRow();
+    const td0=tr.insertCell(); td0.className='c-bu'; td0.textContent=s.bu;
+
+    let buSum=0, buCount=0;
+    MONTHS.forEach((m,mi)=>{
+      const td=tr.insertCell(); td.style.textAlign='center';
+      const v=s.monthlyVals[mi];
+      const u=s.monthlyUnits[mi]||'';
+      const {avg}=monthData[mi];
+
+      if(v===null||v===undefined){
+        td.className='cmp-miss';
+        td.innerHTML='<span style="color:var(--muted);font-size:11px;">—</span>';
+      } else if(v===0){
+        td.className='cmp-zero';
+        let yoyZHtml='';
+        if(s.prevYearVals){const pv=s.prevYearVals[mi];if(pv!==null&&pv!==undefined&&pv>0){yoyZHtml=`<br><span style="font-size:9px;color:#ff6b6b;font-weight:700;">was ${fmtVal(pv)}</span>`;}}
+        td.innerHTML=`<span style="font-size:12px;font-weight:700;">0</span><br><span style="font-size:10px;">${u}</span>${yoyZHtml}`;
+      } else {
+        buSum+=v; buCount++;
+        const ratio = avg ? v/avg : 1;
+        let cls='cmp-ok';
+        if(ratio>2) cls='cmp-hi';
+        else if(ratio<0.4) cls='cmp-lo';
+        td.className=cls;
+        const icon = ratio>2?'↑↑':ratio<0.4?'↓↓':'';
+        let yoyHtml='';
+        if(s.prevYearVals){const pv=s.prevYearVals[mi];if(pv!==null&&pv!==undefined&&pv>0){const pct=((v-pv)/pv*100).toFixed(0);const pc=pct>0?'#ff6b6b':'#2ed573';yoyHtml=`<br><span style="font-size:9px;color:${pc};font-weight:700;">${pct>0?'+':''}${pct}% vs PY</span>`;}}
+        td.innerHTML=`<span style="font-size:12px;font-weight:700;">${icon}${fmtVal(v)}</span><br><span style="font-size:10px;color:var(--muted);">${u}</span>${yoyHtml}`;
+        td.title=s.prevYearVals&&s.prevYearVals[mi]!==null?`Current: ${fmtVal(v)} ${u} | Prev Year: ${fmtVal(s.prevYearVals[mi])} ${s.prevYearUnits?s.prevYearUnits[mi]||u:u}`:`${fmtVal(v)} ${u}`;
+      }
+    });
+
+    // Annual
+    const tdA=tr.insertCell(); tdA.style.textAlign='center';
+    if(s.annual!==null&&s.annual!==undefined){
+      tdA.innerHTML=`<span style="font-size:12px;font-weight:700;">${fmtVal(s.annual)}</span><br><span style="font-size:10px;color:var(--muted);">${s.annualUnit||''}</span>`;
+    } else { tdA.innerHTML='<span style="color:var(--muted);font-size:11px;">—</span>'; }
+
+    // Avg/month
+    const tdAvg=tr.insertCell(); tdAvg.style.textAlign='center';
+    tdAvg.innerHTML=buCount ? `<span style="font-size:12px;font-weight:700;color:var(--accent2);">${fmtVal(buSum/buCount)}</span>` : '<span style="color:var(--muted);">—</span>';
+  });
+
+  // Footer: cross-BU average per month
+  const trAvg=tbody.insertRow();
+  trAvg.style.borderTop='2px solid var(--border)';trAvg.style.background='rgba(0,212,170,.04)';
+  const td0=trAvg.insertCell();td0.className='c-bu';
+  td0.innerHTML='<em style="color:var(--accent2);font-size:11px;">Cross-BU Average</em>';
+  MONTHS.forEach((_,mi)=>{
+    const td=trAvg.insertCell();td.style.textAlign='center';
+    const {avg}=monthData[mi];
+    td.innerHTML=avg?`<span style="font-size:12px;color:var(--accent2);font-weight:700;">${fmtVal(avg)}</span>`:'<span style="color:var(--muted);">—</span>';
+  });
+  trAvg.insertCell();trAvg.insertCell();
+}
+
+// ════════════════════════════════════════════════
+// ISSUE TRACKER
+// ════════════════════════════════════════════════
+function updateTrkKpis(issues) {
+  const c={Open:0,Communicated:0,Resolved:0,Dismissed:0};
+  issues.forEach(i=>{ const s=getStatus(i).status; c[s]=(c[s]||0)+1; });
+  document.getElementById('trk-kpi-open').textContent=c.Open;
+  document.getElementById('trk-kpi-comm').textContent=c.Communicated;
+  document.getElementById('trk-kpi-res').textContent=c.Resolved;
+  document.getElementById('trk-kpi-dis').textContent=c.Dismissed;
+}
+
+function renderTracker() {
+  const sevF    = document.getElementById('trk-sev').value;
+  const buF     = document.getElementById('trk-bu').value;
+  const statusF = document.getElementById('trk-status').value;
+
+  let issues = [...DASH.issues].sort((a,b)=>PRIORITY[b.severity]-PRIORITY[a.severity]);
+  updateTrkKpis(issues);
+
+  if(sevF)    issues=issues.filter(i=>i.severity===sevF);
+  if(buF)     issues=issues.filter(i=>i.bu===buF);
+  if(statusF) issues=issues.filter(i=>getStatus(i).status===statusF);
+
+  const tbody=document.getElementById('trk-tbody');
+  tbody.innerHTML='';
+  document.getElementById('trk-count').textContent=issues.length;
+
+  issues.forEach((issue,idx)=>{
+    const trk=getStatus(issue);
+    const key=issueKey(issue);
+    const tr=tbody.insertRow();
+    const tms=DASH.metricSummaries.find(m=>m.bu===issue.bu&&m.metric===issue.metric);
+    const tmi=MONTHS.indexOf(issue.month);
+    let tVal='—',tUnit='—';
+    if(issue.issue_type==='Missing Data'||issue.issue_type==='Consecutive Gap'){tVal='Not submitted';}
+    else if(tms&&tmi>=0){const tv=tms.monthlyVals[tmi];const tu=tms.monthlyUnits[tmi]||'—';tVal=tv!==null?fmtVal(tv):'—';tUnit=tu;}
+    tr.innerHTML=`
+      <td><span class="bs bs-${issue.severity}">${issue.severity}</span></td>
+      <td style="font-weight:600;">${issue.bu}</td>
+      <td>${issue.metric}</td>
+      <td>${issue.month}</td>
+      <td style="font-weight:700;color:${issue.issue_type==='Missing Data'||issue.issue_type==='Consecutive Gap'?'var(--critical)':issue.issue_type==='Anomaly'?'var(--medium)':'var(--text)'}">${tVal}</td>
+      <td style="color:var(--muted)">${tUnit}</td>
+      <td><span class="bt">${issue.issue_type}</span><br><span style="font-size:11px;color:var(--muted);">${issue.detail}</span></td>
+      <td>
+        <select class="trk-sel-${idx}" onchange="updateTrackerRow(this,'${key}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;">
+          ${['Open','Communicated','Resolved','Dismissed'].map(s=>`<option${trk.status===s?' selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <textarea class="trk-note" rows="2" placeholder="Add note…" id="note-${key}" onblur="saveNote('${key}',this.value)">${trk.note||''}</textarea>
+      </td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;" id="ts-${key}">${trk.ts||'—'}</td>
+    `;
+  });
+}
+
+function updateTrackerRow(sel, key) {
+  const status = sel.value;
+  const noteEl = document.getElementById('note-'+key);
+  const note   = noteEl ? noteEl.value : '';
+  const t=getTracking();
+  const ts=new Date().toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'});
+  t[key]={status,note,ts};
+  saveTracking(t);
+  const tsEl=document.getElementById('ts-'+key);
+  if(tsEl) tsEl.textContent=ts;
+  updateTrkKpis(DASH.issues);
+  updateAcKpis();
+}
+
+function saveNote(key, note) {
+  const t=getTracking(); const e=t[key]||{status:'Open',ts:''};
+  const ts=new Date().toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'});
+  t[key]={...e,note,ts};
+  saveTracking(t);
+  const tsEl=document.getElementById('ts-'+key);
+  if(tsEl) tsEl.textContent=ts;
+}
+
+// ════════════════════════════════════════════════
+// CLIENT REPORT GENERATOR
+// ════════════════════════════════════════════════
+function generateReport() {
+  const scope = document.getElementById('rpt-scope').value;
+  const buF   = document.getElementById('rpt-bu').value;
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+
+  let issues = [...DASH.issues].sort((a,b)=>PRIORITY[b.severity]-PRIORITY[a.severity]);
+  if(buF) issues=issues.filter(i=>i.bu===buF);
+  if(scope==='critical') issues=issues.filter(i=>i.severity==='Critical');
+  else if(scope==='high') issues=issues.filter(i=>i.severity==='Critical'||i.severity==='High');
+
+  const {company,completenessScores,allBUs} = DASH;
+  const busWithData=allBUs.filter(b=>completenessScores[b]&&completenessScores[b].has_data);
+  const avgScore=busWithData.length?(busWithData.reduce((s,b)=>s+completenessScores[b].score,0)/busWithData.length).toFixed(1):'—';
+  const sevCount={Critical:0,High:0,Medium:0,Low:0};
+  DASH.issues.forEach(i=>sevCount[i.severity]=(sevCount[i.severity]||0)+1);
+
+  const criticals   = issues.filter(i=>i.severity==='Critical'&&i.issue_type!=='Missing Data'&&i.issue_type!=='Zero Value');
+  const missing     = issues.filter(i=>i.issue_type==='Missing Data'||i.issue_type==='Consecutive Gap');
+  const anomalies   = issues.filter(i=>i.issue_type==='Anomaly');
+  const unitIssues  = issues.filter(i=>i.issue_type==='Unit Inconsistency');
+  const zeros       = issues.filter(i=>i.issue_type==='Zero Value');
+
+  // Group missing by BU
+  const missByBU={};
+  missing.forEach(i=>{ if(!missByBU[i.bu]) missByBU[i.bu]=[]; missByBU[i.bu].push(i); });
+
+  const scoreTable = busWithData.sort((a,b)=>(completenessScores[a].score||0)-(completenessScores[b].score||0))
+    .map(bu=>{
+      const sc=completenessScores[bu];
+      const color=sc.score>=80?'#007744':sc.score>=60?'#aa6600':'#cc0022';
+      return `<tr>
+        <td>${bu}</td>
+        <td style="color:${color};font-weight:700;">${sc.score}/100</td>
+        <td>${sc.completeness_pct??'—'}%</td>
+        <td>${sc.missing}</td>
+        <td>${sc.anomalies}</td>
+        <td>${sc.unit_issues}</td>
+      </tr>`;
+    }).join('');
+
+  const critSection = criticals.length ? `
+    <h2 class="rb-critical">SECTION 1 — CRITICAL ISSUES: IMMEDIATE ACTION REQUIRED</h2>
+    ${criticals.map((i,n)=>{
+      const ms=DASH.metricSummaries.find(m=>m.bu===i.bu&&m.metric===i.metric);
+      return `<h3>${n+1}. ${i.bu} — ${i.metric} — ${i.month}</h3>
+      <p>${i.detail}</p>
+      <p><em>${inferCause(i,ms)}</em></p>
+      <p><strong>Suggested action:</strong> ${suggestedMessage(i,ms)}</p>`;
+    }).join('')}` : '';
+
+  const anomSection = anomalies.length ? `
+    <h2>SECTION 2 — DATA ANOMALIES (UNUSUAL VALUES)</h2>
+    <table><tr><th>Business Unit</th><th>Metric</th><th>Month</th><th>Submitted Value</th><th>Likely Cause</th></tr>
+    ${anomalies.map(i=>{
+      const ms=DASH.metricSummaries.find(m=>m.bu===i.bu&&m.metric===i.metric);
+      const mi=MONTHS.indexOf(i.month);
+      const u=ms&&mi>=0?ms.monthlyUnits[mi]:'';
+      return `<tr class="${i.severity==='Critical'?'rb-critical':i.severity==='High'?'rb-high':''}">
+        <td>${i.bu}</td><td>${i.metric}</td><td>${i.month}</td>
+        <td>${i.value!==null?fmtVal(i.value)+' '+u:'—'}</td>
+        <td>${inferCause(i,ms)}</td></tr>`;
+    }).join('')}
+    </table>` : '';
+
+  const missSection = Object.keys(missByBU).length ? `
+    <h2>SECTION 3 — MISSING DATA SUBMISSIONS</h2>
+    ${Object.entries(missByBU).map(([bu,iList])=>`
+      <h3>${bu}</h3>
+      ${iList.map(i=>`<p>• <strong>${i.metric}</strong>: ${i.month}</p>`).join('')}
+    `).join('')}` : '';
+
+  const unitSection = unitIssues.length ? `
+    <h2>SECTION 4 — UNIT INCONSISTENCIES</h2>
+    <table><tr><th>Business Unit</th><th>Metric</th><th>Issue</th></tr>
+    ${unitIssues.map(i=>`<tr><td>${i.bu}</td><td>${i.metric}</td><td>${i.detail}</td></tr>`).join('')}
+    </table>` : '';
+
+  const zeroSection = zeros.length ? `
+    <h2>SECTION 5 — ZERO VALUES (REQUIRE CONFIRMATION)</h2>
+    <table><tr><th>Business Unit</th><th>Metric</th><th>Month</th></tr>
+    ${zeros.map(i=>`<tr><td>${i.bu}</td><td>${i.metric}</td><td>${i.month}</td></tr>`).join('')}
+    </table>
+    <p><em>Please confirm whether the above zero submissions are accurate or whether data needs to be entered.</em></p>` : '';
+
+  const html = `<div class="report-box" id="rpt-content">
+    <h1>BRSR Data Quality Report</h1>
+    <p><strong>Company:</strong> ${company} &nbsp;|&nbsp; <strong>Period:</strong> FY 2024-25 (April – March)</p>
+    <p><strong>Report generated by:</strong> Oren Sustainability Hub &nbsp;|&nbsp; <strong>Date:</strong> ${today}</p>
+    ${buF?`<p><strong>Scope:</strong> ${buF} only</p>`:''}
+    <h2>EXECUTIVE SUMMARY</h2>
+    <table>
+      <tr><th>Overall Data Health Score</th><th>Total Issues</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th></tr>
+      <tr>
+        <td style="font-weight:700;color:${avgScore>=80?'#007744':avgScore>=60?'#aa6600':'#cc0022'}">${avgScore}/100</td>
+        <td>${DASH.issues.length}</td>
+        <td class="rb-critical">${sevCount.Critical}</td>
+        <td class="rb-high">${sevCount.High}</td>
+        <td>${sevCount.Medium}</td>
+        <td>${sevCount.Low}</td>
+      </tr>
+    </table>
+    <p>This report summarises data quality issues identified in the BRSR submissions for <strong>${company}</strong>.
+    Please review the sections below and coordinate with the relevant stakeholders to correct or complete the data in the OSH portal.</p>
+    ${critSection}${anomSection}${missSection}${unitSection}${zeroSection}
+    <h2>BUSINESS UNIT DATA HEALTH SUMMARY</h2>
+    <table>
+      <tr><th>Business Unit</th><th>Health Score</th><th>Data Filled</th><th>Missing Months</th><th>Anomalies</th><th>Unit Issues</th></tr>
+      ${scoreTable}
+    </table>
+    <p style="margin-top:20px;font-size:11px;color:#888;">This report was automatically generated by Oren Sustainability Hub (OSH). For queries, contact your OSH Client Success Manager.</p>
+  </div>`;
+
+  document.getElementById('rpt-area').innerHTML = html;
+}
+
+function copyReport() {
+  const el = document.getElementById('rpt-content');
+  if (!el) { alert('Please generate the report first.'); return; }
+  navigator.clipboard.writeText(el.innerText).then(()=>alert('Report text copied to clipboard!')).catch(()=>{
+    const r=document.createRange();r.selectNode(el);
+    window.getSelection().removeAllRanges();window.getSelection().addRange(r);
+    document.execCommand('copy');window.getSelection().removeAllRanges();
+    alert('Report copied!');
+  });
+}
+</script>
+</body>
+</html>
