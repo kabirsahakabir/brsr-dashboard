@@ -838,14 +838,17 @@ function analyzeData(rows) {
         });
 
         // 2. Anomaly detection
+        // Conservative: needs a meaningful sample (>=6 months) and flags a month
+        // only when it is BOTH a strong z-score outlier (>2.5 SD) AND outside the
+        // IQR fence — so normal seasonal variation isn't flagged as an anomaly.
         const valid = monthlyVals.filter(v=>v!==null&&v>0);
-        if (valid.length >= 3) {
+        if (valid.length >= 6) {
           const st = calcStats(valid);
           monthlyVals.forEach((v,i) => {
             if (v===null||v===0) return;
             const z = st.std>0 ? (v-st.mean)/st.std : 0;
             const iqrOut = v<st.lower || v>st.upper;
-            if (Math.abs(z)>1.5 || iqrOut) {
+            if (Math.abs(z)>2.5 && iqrOut) {
               const dir = v>st.mean?'spike':'drop';
               const pct = st.mean>0 ? ((v-st.mean)/st.mean*100).toFixed(0) : 0;
               const fmt = n => n.toLocaleString(undefined,{maximumFractionDigits:2});
