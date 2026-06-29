@@ -446,7 +446,6 @@ select:focus,input:focus{border-color:var(--accent);}
             <option>Missing Data</option><option>Consecutive Gap</option>
             <option>Anomaly</option><option>MoM Anomaly</option>
             <option>Unit Inconsistency</option><option>Zero Value</option>
-            <option>Annual YoY Deviation</option>
           </select>
           <select id="if-sev" onchange="filterIssues()">
             <option value="">All Severities</option>
@@ -573,7 +572,6 @@ select:focus,input:focus{border-color:var(--accent);}
             <option>Missing Data</option><option>Consecutive Gap</option>
             <option>Anomaly</option><option>MoM Anomaly</option>
             <option>Unit Inconsistency</option><option>Zero Value</option>
-            <option>Annual YoY Deviation</option>
           </select>
           <select id="ac-status" onchange="renderActionCenter()">
             <option value="">All Statuses</option>
@@ -963,61 +961,10 @@ function analyzeData(rows) {
     scores[bu].completeness_pct = total>0 ? Math.round(filled/total*100) : 0;
   });
 
-  // ── Previous year data (second pass) ──
-  // Try "Previous FY" subquestion rows
-  for (const [subq, label] of Object.entries(KEY_METRICS_PREV)) {
-    let subset = rows.filter(r => String(r.Subquestion||'').trim() === subq);
-    if (subq.includes('Electricity')) {
-      const s2 = subset.filter(r => String(r.DataPoint||'').includes('Electricity Input Consumption'));
-      if (s2.length > 0) subset = s2;
-    }
-    for (const bu of allBUs) {
-      const buRows = subset.filter(r => String(r.BusinessUnit||'').trim() === bu);
-      if (!buRows.length) continue;
-      const row = buRows[0];
-      const prevVals = DATA_COLS.map(c => parseNum(row[c]));
-      const prevUnits = UNIT_COLS.map(c => cleanUnit(row[c]));
-      if (!prevVals.some(v => v !== null)) continue;
-      const existing = metricSummaries.find(m => m.bu === bu && m.metric === label);
-      if (existing && !existing.prevYearVals) {
-        existing.prevYearVals = prevVals;
-        existing.prevYearUnits = prevUnits;
-        existing.prevAnnual = parseNum(row.AnnualData);
-        existing.prevAnnualUnit = cleanUnit(row.AnnualUnit);
-      }
-    }
-  }
-  // Fall back: check PreviousAprilData … PreviousMarchData columns in same rows
-  metricSummaries.forEach(s => {
-    if (s.prevYearVals) return;
-    const subqEntry = Object.entries(KEY_METRICS).find(([k,v]) => v === s.metric);
-    if (!subqEntry) return;
-    let subset = rows.filter(r => String(r.Subquestion||'').trim() === subqEntry[0]);
-    const buRows = subset.filter(r => String(r.BusinessUnit||'').trim() === s.bu);
-    if (!buRows.length) return;
-    const row = buRows[0];
-    const prevVals = PREV_DATA_COLS.map(c => parseNum(row[c]));
-    const prevUnits = PREV_UNIT_COLS.map(c => cleanUnit(row[c]));
-    if (prevVals.some(v => v !== null)) {
-      s.prevYearVals = prevVals;
-      s.prevYearUnits = prevUnits;
-      s.prevAnnual = parseNum(row.PreviousAnnualData);
-      s.prevAnnualUnit = cleanUnit(row.PreviousAnnualUnit);
-    }
-  });
-
-  // ── Annual BU: year-on-year deviation check (needs prev year data from pass above) ──
-  metricSummaries.filter(s=>s.isAnnual&&s.annual!==null&&s.prevAnnual!==null).forEach(s=>{
-    const pct = (s.annual - s.prevAnnual) / s.prevAnnual * 100;
-    if (Math.abs(pct) >= 20) {
-      const dir = pct>0 ? 'increase' : 'decrease';
-      const sev = Math.abs(pct) >= 50 ? 'High' : 'Medium';
-      const fmt = n=>n.toLocaleString(undefined,{maximumFractionDigits:2});
-      issues.push({bu:s.bu,metric:s.metric,month:'Annual',issue_type:'Annual YoY Deviation',severity:sev,
-        detail:`Annual ${dir} of ${Math.abs(pct).toFixed(0)}%: ${fmt(s.annual)} ${s.annualUnit} vs prev year ${fmt(s.prevAnnual)} ${s.prevAnnualUnit}`,
-        value:s.annual,isAnnual:true});
-    }
-  });
+  // ── Previous-year data intentionally excluded from the health check ──
+  // Analysis covers the current FY only: no prev-year load, no YoY-deviation
+  // issues, and no prev-year chart/table comparisons (all such render code is
+  // guarded on prevYearVals/prevAnnual, which are never set here).
 
   return {company,allBUs,issues,metricSummaries,completenessScores:scores,metrics:Object.values(KEY_METRICS)};
 }
@@ -1257,7 +1204,7 @@ function initScorecards() {
     card.className='bu-card';
     const annTag = sc.isAnnual ? '<span style="font-size:9px;background:rgba(108,99,255,.2);color:#a29bfe;border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:600;">ANNUAL</span>' : '';
     const metaLine = sc.isAnnual
-      ? `<span>📅 Annual data only</span><span>⚠️ ${sc.anomalies||0} YoY flags</span>`
+      ? `<span>📅 Annual data only</span>`
       : `<span>❌ ${sc.missing||0} missing</span><span>⚠️ ${sc.anomalies||0} anomalies</span><span>🔀 ${sc.unit_issues||0} unit</span>`;
     card.innerHTML=`
       <div class="bu-name">${bu}${annTag}</div>
