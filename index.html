@@ -348,7 +348,6 @@ select:focus,input:focus{border-color:var(--accent);}
       <h3 style="margin-top:6px;">Navigation</h3>
       <div class="nav-item active" onclick="showPage('overview')" id="nav-overview"><span class="nav-icon">📊</span> Overview</div>
       <div class="nav-item" onclick="showPage('scorecards')" id="nav-scorecards"><span class="nav-icon">🏢</span> BU Scorecards</div>
-      <div class="nav-item" onclick="showPage('heatmap')" id="nav-heatmap"><span class="nav-icon">🗺️</span> Data Heatmap</div>
       <div class="nav-item" onclick="showPage('trends')" id="nav-trends"><span class="nav-icon">📈</span> Monthly Trends</div>
       <div class="nav-item" onclick="showPage('issues')" id="nav-issues"><span class="nav-icon">⚠️</span> Issues Log</div>
       <div class="nav-item" onclick="showPage('anomalies')" id="nav-anomalies"><span class="nav-icon">🔴</span> Anomaly Drill-Down</div>
@@ -356,7 +355,6 @@ select:focus,input:focus{border-color:var(--accent);}
       <div style="padding:8px 18px 4px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(139,143,168,.5);margin-top:6px;">CSM Tools</div>
       <div class="nav-item" onclick="showPage('actions')" id="nav-actions"><span class="nav-icon">🚨</span> Action Center</div>
       <div class="nav-item" onclick="showPage('compare')" id="nav-compare"><span class="nav-icon">📊</span> BU Comparison</div>
-      <div class="nav-item" onclick="showPage('tracker')" id="nav-tracker"><span class="nav-icon">✅</span> Issue Tracker</div>
       <div class="nav-item" onclick="showPage('report')" id="nav-report"><span class="nav-icon">📧</span> Client Report</div>
       <div style="padding:18px;border-top:1px solid var(--border);margin-top:24px;font-size:11px;color:var(--muted);line-height:1.7;">
         <strong style="color:var(--text)">Severity</strong><br>
@@ -395,26 +393,6 @@ select:focus,input:focus{border-color:var(--accent);}
         <div class="page-title">Business Unit Scorecards</div>
         <div class="page-desc">Health score per BU. Based on data completeness (40%), anomaly count (30%), and unit consistency (20%). Click any card to see its issues.</div>
         <div class="sc-grid" id="scorecard-grid"></div>
-      </div>
-
-      <!-- ── HEATMAP ── -->
-      <div class="page" id="page-heatmap">
-        <div class="page-title">Data Submission Heatmap</div>
-        <div class="page-desc">Month × Business Unit quality grid. Each cell shows the worst issue for that combination.</div>
-        <div class="legend">
-          <div class="legend-i"><div class="ld" style="background:rgba(46,213,115,.5);"></div>OK</div>
-          <div class="legend-i"><div class="ld" style="background:rgba(255,71,87,.5);"></div>Missing</div>
-          <div class="legend-i"><div class="ld" style="background:rgba(255,217,61,.5);"></div>Anomaly</div>
-          <div class="legend-i"><div class="ld" style="background:rgba(255,107,51,.4);"></div>Zero</div>
-          <div class="legend-i"><div class="ld" style="background:rgba(108,99,255,.5);"></div>Unit Issue</div>
-          <div class="legend-i"><div class="ld" style="background:rgba(255,255,255,.05);"></div>No Metric</div>
-        </div>
-        <div class="filters">
-          <select id="hm-metric" onchange="renderHeatmap()"><option value="">All Metrics</option></select>
-        </div>
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div class="heatmap-wrap"><table class="hm-table" id="hm-table"></table></div>
-        </div>
       </div>
 
       <!-- ── TRENDS ── -->
@@ -468,7 +446,7 @@ select:focus,input:focus{border-color:var(--accent);}
       <!-- ── ANOMALY DRILL-DOWN ── -->
       <div class="page" id="page-anomalies">
         <div class="page-title">Anomaly Drill-Down</div>
-        <div class="page-desc">Statistical outliers detected using IQR fencing + Z-score (|Z|&gt;1.5). Select a BU + Metric to see the trend chart with anomaly markers.</div>
+        <div class="page-desc">Statistical outliers detected using IQR fencing combined with Z-score (|Z|&gt;2.5). Select a BU + Metric to see the trend chart with anomaly markers.</div>
         <div class="filters">
           <select id="ad-bu" onchange="renderAnomalyDrill()"><option value="">All Business Units</option></select>
           <select id="ad-metric" onchange="renderAnomalyDrill()"><option value="">All Metrics</option></select>
@@ -501,7 +479,7 @@ select:focus,input:focus{border-color:var(--accent);}
           <br><span style="font-size:12px;">
             <span style="color:var(--ok)">■</span> OK &nbsp;
             <span style="color:#ff4757">■</span> Missing &nbsp;
-            <span style="color:#ffd93d">■</span> Anomaly &nbsp;
+            <span style="color:#ffd93d">■</span> Anomaly / month-on-month spike &nbsp;
             <span style="color:#ff6b35">■</span> Zero submitted &nbsp;
             <span style="color:#a29bfe">■</span> Unit inconsistency &nbsp;
             <span style="color:var(--muted)">■</span> No metric data
@@ -604,37 +582,6 @@ select:focus,input:focus{border-color:var(--accent);}
           </div>
         </div>
         <div id="cmp-placeholder" class="card"><div class="no-data">Select a metric above to compare Business Units.</div></div>
-      </div>
-
-      <!-- ══ ISSUE TRACKER ══ -->
-      <div class="page" id="page-tracker">
-        <div class="page-title">Issue Tracker</div>
-        <div class="page-desc">Track which issues have been communicated to the client and which are resolved. Status and notes are saved in your browser.</div>
-        <div class="filters">
-          <select id="trk-sev" onchange="renderTracker()">
-            <option value="">All Severities</option><option>Critical</option><option>High</option><option>Medium</option>
-          </select>
-          <select id="trk-bu" onchange="renderTracker()"><option value="">All BUs</option></select>
-          <select id="trk-status" onchange="renderTracker()">
-            <option value="">All Statuses</option><option>Open</option><option>Communicated</option><option>Resolved</option><option>Dismissed</option>
-          </select>
-          <button class="btn btn-ol" onclick="clearAllTracking()">↺ Reset All Status</button>
-        </div>
-        <div class="cards-row c4">
-          <div class="card stat-card"><div class="lbl">Open</div><div class="val critical" id="trk-kpi-open">—</div></div>
-          <div class="card stat-card"><div class="lbl">Communicated</div><div class="val med" id="trk-kpi-comm">—</div></div>
-          <div class="card stat-card"><div class="lbl">Resolved</div><div class="val good" id="trk-kpi-res">—</div></div>
-          <div class="card stat-card"><div class="lbl">Dismissed</div><div class="val" id="trk-kpi-dis" style="color:var(--muted)">—</div></div>
-        </div>
-        <div class="card" style="padding:0;">
-          <div class="scroll-lg">
-            <table class="it" id="trk-table">
-              <thead><tr><th>Severity</th><th>Business Unit</th><th>Metric</th><th>Month</th><th>Value</th><th>Unit</th><th>Issue</th><th>Status</th><th>Notes</th><th>Updated</th></tr></thead>
-              <tbody id="trk-tbody"></tbody>
-            </table>
-          </div>
-          <div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);">Showing <strong id="trk-count">0</strong> issues</div>
-        </div>
       </div>
 
       <!-- ══ CLIENT REPORT ══ -->
@@ -949,6 +896,24 @@ function analyzeData(rows) {
     }
   });
 
+  // ── De-duplicate overlapping issues so the log doesn't repeat the same problem ──
+  // (a) A month already covered by a 'Consecutive Gap' shouldn't also appear as its own
+  //     'Missing Data' row. (b) A month flagged as a 'MoM Anomaly' shouldn't also be
+  //     listed as a separate statistical 'Anomaly'.
+  const gapCover = new Set();
+  issues.filter(i => i.issue_type === 'Consecutive Gap').forEach(g => {
+    String(g.month).split(',').forEach(mn => gapCover.add(g.bu + '|' + g.metric + '|' + mn.trim()));
+  });
+  const momCover = new Set();
+  issues.filter(i => i.issue_type === 'MoM Anomaly').forEach(a => momCover.add(a.bu + '|' + a.metric + '|' + a.month));
+  const deduped = issues.filter(i => {
+    if (i.issue_type === 'Missing Data' && gapCover.has(i.bu + '|' + i.metric + '|' + i.month)) return false;
+    if (i.issue_type === 'Anomaly'      && momCover.has(i.bu + '|' + i.metric + '|' + i.month)) return false;
+    return true;
+  });
+  issues.length = 0;
+  issues.push(...deduped);
+
   // ── Data completeness % per BU ──
   allBUs.forEach(bu=>{
     if(!scores[bu]) return;
@@ -1112,7 +1077,6 @@ function initDashboard(data) {
   showPage('overview');
   initScorecards();
   initFilters();
-  populateHmMetric();
   populateDiMetric();
   populateActionFilters();
 }
@@ -1123,13 +1087,11 @@ function showPage(id) {
   document.getElementById('page-'+id).classList.add('active');
   document.getElementById('nav-'+id).classList.add('active');
   if(id==='overview')   renderOverview();
-  if(id==='heatmap')    renderHeatmap();
   if(id==='trends')     populateTrendControls();
   if(id==='anomalies')  renderAnomalyDrill();
   if(id==='inspector')  populateDiMetric();
   if(id==='actions')    renderActionCenter();
   if(id==='compare')    populateCmpMetric();
-  if(id==='tracker')    renderTracker();
   if(id==='report')     populateRptControls();
 }
 
@@ -1141,8 +1103,10 @@ function renderOverview() {
   const busWithData = allBUs.filter(b=>completenessScores[b]&&completenessScores[b].has_data);
   const avgScore = busWithData.length ? (busWithData.reduce((s,b)=>s+completenessScores[b].score,0)/busWithData.length).toFixed(1) : '—';
 
-  const miss = issues.filter(i=>i.issue_type==='Missing Data').length;
-  const anom = issues.filter(i=>i.issue_type==='Anomaly').length;
+  // Count actual missing monthly cells (gaps collapse in the log, but the KPI shows true months missing)
+  const miss = DASH.metricSummaries.filter(m=>!m.isAnnual)
+    .reduce((n,m)=>n+m.monthlyVals.filter(v=>v===null||v===undefined).length,0);
+  const anom = issues.filter(i=>i.issue_type==='Anomaly'||i.issue_type==='MoM Anomaly').length;
   const unit = issues.filter(i=>i.issue_type==='Unit Inconsistency').length;
 
   document.getElementById('kpi-score').textContent = avgScore+'/100';
@@ -1593,7 +1557,7 @@ function renderDataInspector() {
 
   // ── KPIs ──
   document.getElementById('di-kpi-miss').textContent = metricIssues.filter(i=>i.issue_type==='Missing Data').length;
-  document.getElementById('di-kpi-anom').textContent = metricIssues.filter(i=>i.issue_type==='Anomaly').length;
+  document.getElementById('di-kpi-anom').textContent = metricIssues.filter(i=>i.issue_type==='Anomaly'||i.issue_type==='MoM Anomaly').length;
   document.getElementById('di-kpi-unit').textContent = metricIssues.filter(i=>i.issue_type==='Unit Inconsistency').length;
   document.getElementById('di-kpi-zero').textContent = metricIssues.filter(i=>i.issue_type==='Zero Value').length;
   document.getElementById('di-table-title').textContent = `Submitted Data — ${metric}`;
@@ -1648,7 +1612,7 @@ function renderDataInspector() {
         td.innerHTML = `<span class="di-v">0</span><span class="di-u">${unt}</span>`;
         td.title = `${s.bu} / ${m}: Zero value — verify if intentional`;
       } else {
-        const cls = worst ? ({Anomaly:'di-anom','Unit Inconsistency':'di-unit'}[worst.issue_type] || 'di-ok') : 'di-ok';
+        const cls = worst ? ({Anomaly:'di-anom','MoM Anomaly':'di-anom','Unit Inconsistency':'di-unit'}[worst.issue_type] || 'di-ok') : 'di-ok';
         td.className = cls;
         const icon = worst ? (sevIcon[worst.severity] || '') : '';
         td.innerHTML = `<span class="di-v">${icon} ${fmtVal(val)}</span><span class="di-u">${unt}</span>`;
